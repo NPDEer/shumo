@@ -1,0 +1,100 @@
+appId: app.shumo.reader
+productName: 数墨
+copyright: Copyright © 2026 数墨
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+asar: true
+npmRebuild: false
+
+mac:
+  category: public.app-category.education
+  identity: null
+  gatekeeperAssess: false
+  hardenedRuntime: false
+  darkModeSupport: true
+  target:
+    - target: dir
+      arch: universal
+    - target: dmg
+      arch: universal
+  extendInfo:
+    CFBundleDisplayName: 数墨
+    CFBundleName: 数墨
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Markdown
+        CFBundleTypeRole: Viewer
+        LSHandlerRank: Owner
+        LSItemContentTypes:
+          - net.daringfireball.markdown
+        CFBundleTypeExtensions:
+          - md
+          - markdown
+          - mdown
+          - mkd
+    UTImportedTypeDeclarations:
+      - UTTypeIdentifier: net.daringfireball.markdown
+        UTTypeDescription: Markdown 文稿
+        UTTypeConformsTo:
+          - public.plain-text
+          - public.text
+        UTTypeTagSpecification:
+          public.filename-extension:
+            - md
+            - markdown
+            - mdown
+            - mkd
+          public.mime-type:
+            - text/markdown
+            - text/x-markdown
+dmg:
+  title: 数墨
+
+win:
+  executableName: Shumo
+  target:
+    - target: nsis
+      arch:
+        - x64
+  fileAssociations:
+    - ext:
+        - md
+        - markdown
+        - mdown
+        - mkd
+      name: Markdown
+      description: Markdown 文稿
+      mimeType: text/markdown
+      role: Viewer
+      rank: Owner
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  shortcutName: 数墨
+  artifactName: Shumo-${version}-win-${arch}.${ext}
+
+linux:
+  executableName: shumo
+  category: Office
+  synopsis: 面向数学笔记的 Markdown 阅读器
+  description: 数墨是只读 Markdown 阅读器，支持 LaTeX 公式、Mermaid 与中文排版。
+  target:
+    - AppImage
+  fileAssociations:
+    - ext:
+        - md
+        - markdown
+        - mdown
+        - mkd
+      name: Markdown
+      description: Markdown 文稿
+      mimeType: text/markdown
+      role: Viewer
+  artifactName: Shumo-${version}-linux-${arch}.${ext}

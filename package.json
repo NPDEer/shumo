@@ -1,0 +1,46 @@
+{
+  "name": "shumo",
+  "version": "1.0.10",
+  "private": true,
+  "type": "module",
+  "description": "面向计算数学笔记的只读 Markdown 阅读器",
+  "author": "数墨",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "NODE_OPTIONS='--require ./tests/preload-mhchem.cjs' tsx --test --test-concurrency=1 tests/*.test.ts",
+    "dist:mac": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg dir --universal",
+    "dist:linux": "npm run build && electron-builder --linux AppImage",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "selftest": "npm run build && node scripts/selftest.mjs",
+    "lifecycle": "npm run build && node scripts/lifecycle.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@neilsustc/markdown-it-katex": "1.0.0",
+    "@types/jsdom": "^30.0.0",
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.6.6",
+    "dompurify": "^3.4.18",
+    "electron": "^45.3.4",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "highlight.js": "^11.12.0",
+    "jsdom": "^31.0.1",
+    "katex": "^0.19.1",
+    "markdown-it": "^15.0.3",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-github-alerts": "0.3.1",
+    "markdown-it-task-lists": "^2.1.1",
+    "mermaid": "^12.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "yaml": "^2.9.1"
+  }
+}

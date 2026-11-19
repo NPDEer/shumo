@@ -1,0 +1,463 @@
+/*---------------------------------------------------------------------------------------------
+ * Preview typography, tables, quotes, code blocks and frontmatter are adapted from
+ * Visual Studio Code:
+ *   extensions/markdown-language-features/media/markdown.css
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ *
+ * Syntax colors are adapted from the same extension's highlight.css, which itself
+ * credits the highlight.js themes vs2015 (Nicolas LLOBERA) and vs (Jason Diamond).
+ *
+ * Task-list checkbox rules follow Markdown All in One media/checkbox.css
+ * (https://github.com/yzhang-gh/vscode-markdown), MIT License.
+ *--------------------------------------------------------------------------------------------*/
+
+#doc {
+  font-family: var(--markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, "Ubuntu", "Droid Sans", sans-serif);
+  font-size: var(--reading-size, var(--markdown-font-size, 14px));
+  line-height: var(--markdown-line-height, 1.6);
+  min-width: 0;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+#doc h1,
+#doc h2,
+#doc h3,
+#doc h4,
+#doc h5,
+#doc h6,
+#doc p,
+#doc ol,
+#doc ul,
+#doc pre {
+  margin-top: 0;
+}
+
+#doc h1,
+#doc h2,
+#doc h3,
+#doc h4,
+#doc h5,
+#doc h6 {
+  font-weight: 600;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  line-height: 1.25;
+  scroll-margin-top: 12px;
+}
+
+#doc h1 {
+  font-size: 2em;
+  margin-top: 0;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vscode-textSeparator-foreground);
+}
+
+#doc h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vscode-textSeparator-foreground);
+}
+
+#doc h3 { font-size: 1.25em; }
+#doc h4 { font-size: 1em; }
+#doc h5 { font-size: 0.875em; }
+#doc h6 { font-size: 0.85em; }
+
+#doc p { margin-bottom: 16px; }
+#doc li p { margin-bottom: 0.7em; }
+#doc ul,
+#doc ol { margin-bottom: 0.7em; }
+#doc ul ul:first-child,
+#doc ul ol:first-child,
+#doc ol ul:first-child,
+#doc ol ol:first-child { margin-bottom: 0; }
+
+#doc a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+#doc a:hover { text-decoration: underline; }
+
+#doc img,
+#doc video {
+  max-width: 100%;
+  height: auto;
+}
+
+#doc hr,
+#doc .footnotes-sep {
+  border: 0;
+  height: 1px;
+  border-bottom: 1px solid var(--vscode-textSeparator-foreground);
+  margin: 16px 0;
+}
+
+#doc sub,
+#doc sup { line-height: 0; }
+
+#doc .table-wrap {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 0 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+#doc table {
+  border-collapse: collapse;
+  margin-bottom: 0.7em;
+}
+
+#doc .table-wrap > table {
+  width: max-content;
+  min-width: 100%;
+  margin-bottom: 0;
+}
+
+#doc th {
+  text-align: left;
+  border-bottom: 1px solid;
+}
+
+#doc th,
+#doc td {
+  padding: 5px 10px;
+  overflow-wrap: break-word;
+}
+
+#doc table > tbody > tr + tr > td { border-top: 1px solid; }
+
+html.vscode-light #doc th { border-color: rgba(0, 0, 0, 0.69); }
+html.vscode-dark #doc th { border-color: rgba(255, 255, 255, 0.69); }
+html.vscode-light #doc h1,
+html.vscode-light #doc h2,
+html.vscode-light #doc hr,
+html.vscode-light #doc td,
+html.vscode-light #doc .footnotes-sep { border-color: rgba(0, 0, 0, 0.18); }
+html.vscode-dark #doc h1,
+html.vscode-dark #doc h2,
+html.vscode-dark #doc hr,
+html.vscode-dark #doc td,
+html.vscode-dark #doc .footnotes-sep { border-color: rgba(255, 255, 255, 0.18); }
+
+#doc blockquote {
+  margin: 0 0 16px;
+  padding: 0 16px 0 10px;
+  border-left: 5px solid var(--vscode-textBlockQuote-border);
+  background: var(--vscode-textBlockQuote-background);
+  border-radius: 2px;
+}
+
+:root {
+  --color-abstract: #087ea4;
+  --color-info: #1d6fbf;
+  --color-todo: #1d6fbf;
+  --color-success: #1a7f37;
+  --color-question: #9a6700;
+  --color-failure: #cf222e;
+  --color-danger: #a40e26;
+  --color-bug: #bc4c00;
+  --color-example: #8250df;
+  --color-quote: #57606a;
+  --color-unknown: #6e7781;
+}
+html.dark {
+  --color-abstract: #5ec8e5;
+  --color-info: #6cb6ff;
+  --color-todo: #6cb6ff;
+  --color-success: #3fb950;
+  --color-question: #e3b341;
+  --color-failure: #ff7b72;
+  --color-danger: #ff9492;
+  --color-bug: #f0883e;
+  --color-example: #d2a8ff;
+  --color-quote: #8b949e;
+  --color-unknown: #8b949e;
+}
+
+#doc .markdown-alert {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#doc .markdown-alert .markdown-alert-title {
+  min-width: 0;
+  flex-wrap: wrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#doc .markdown-alert .markdown-alert-title-text {
+  min-width: 0;
+}
+
+#doc .markdown-alert-abstract { --callout: var(--color-abstract); }
+#doc .markdown-alert-info { --callout: var(--color-info); }
+#doc .markdown-alert-todo { --callout: var(--color-todo); }
+#doc .markdown-alert-success { --callout: var(--color-success); }
+#doc .markdown-alert-question { --callout: var(--color-question); }
+#doc .markdown-alert-failure { --callout: var(--color-failure); }
+#doc .markdown-alert-danger { --callout: var(--color-danger); }
+#doc .markdown-alert-bug { --callout: var(--color-bug); }
+#doc .markdown-alert-example { --callout: var(--color-example); }
+#doc .markdown-alert-quote { --callout: var(--color-quote); }
+#doc .markdown-alert-unknown { --callout: var(--color-unknown); }
+
+#doc .markdown-alert-abstract,
+#doc .markdown-alert-info,
+#doc .markdown-alert-todo,
+#doc .markdown-alert-success,
+#doc .markdown-alert-question,
+#doc .markdown-alert-failure,
+#doc .markdown-alert-danger,
+#doc .markdown-alert-bug,
+#doc .markdown-alert-example,
+#doc .markdown-alert-quote,
+#doc .markdown-alert-unknown {
+  border-left-color: var(--callout);
+  background: color-mix(in srgb, var(--callout) 9%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+#doc .markdown-alert-abstract .markdown-alert-title,
+#doc .markdown-alert-info .markdown-alert-title,
+#doc .markdown-alert-todo .markdown-alert-title,
+#doc .markdown-alert-success .markdown-alert-title,
+#doc .markdown-alert-question .markdown-alert-title,
+#doc .markdown-alert-failure .markdown-alert-title,
+#doc .markdown-alert-danger .markdown-alert-title,
+#doc .markdown-alert-bug .markdown-alert-title,
+#doc .markdown-alert-example .markdown-alert-title,
+#doc .markdown-alert-quote .markdown-alert-title,
+#doc .markdown-alert-unknown .markdown-alert-title {
+  color: var(--callout);
+}
+
+#doc details.markdown-alert > summary.markdown-alert-title {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+}
+
+#doc details.markdown-alert > summary.markdown-alert-title::-webkit-details-marker {
+  display: none;
+}
+
+#doc details.markdown-alert > summary.markdown-alert-title::before {
+  content: "";
+  width: 0;
+  height: 0;
+  margin-top: 0.35em;
+  margin-right: 0.45em;
+  border-style: solid;
+  border-width: 0.28em 0 0.28em 0.42em;
+  border-color: transparent transparent transparent currentColor;
+  flex: none;
+}
+
+#doc details.markdown-alert[open] > summary.markdown-alert-title::before {
+  margin-top: 0.45em;
+  border-width: 0.42em 0.28em 0 0.28em;
+  border-color: currentColor transparent transparent transparent;
+}
+
+#doc details.markdown-alert > summary.markdown-alert-title:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+#doc pre,
+#doc code,
+#doc .katex {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+#doc code {
+  font-family: var(--vscode-editor-font-family, "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace);
+  font-size: 1em;
+  line-height: 1.357em;
+}
+
+#doc :not(pre) > code {
+  color: var(--vscode-textPreformat-foreground);
+  background: var(--vscode-textPreformat-background);
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+#doc pre {
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 0 16px;
+  background-color: var(--vscode-textCodeBlock-background);
+  border: 1px solid var(--vscode-widget-border);
+  padding: 16px;
+  border-radius: 3px;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+}
+
+#doc pre code {
+  display: inline-block;
+  color: var(--vscode-editor-foreground);
+  tab-size: 4;
+  background: none;
+  padding: 0;
+}
+
+#doc table.frontmatter {
+  margin-bottom: 16px;
+  border-collapse: collapse;
+}
+
+#doc table.frontmatter th,
+#doc table.frontmatter td {
+  padding: 6px 13px;
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  text-align: left;
+  vertical-align: top;
+}
+
+#doc table.frontmatter th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#doc table.frontmatter td > ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+#doc .frontmatter-error {
+  margin-bottom: 16px;
+  padding: 8px 13px;
+  border-left: 4px solid #f48771;
+  background: rgba(244, 135, 113, 0.1);
+  color: #f48771;
+}
+
+#doc .frontmatter-error pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* Markdown All in One media/checkbox.css */
+#doc .task-list-item { list-style-type: none; }
+#doc .task-list-item-checkbox {
+  margin-left: -20px;
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+#doc .footnotes {
+  margin-top: 16px;
+  font-size: 0.92em;
+}
+#doc .footnote-ref a,
+#doc .footnote-backref { text-decoration: none; }
+
+#doc .katex-display,
+#doc p:has(> .katex-display) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+#doc .katex,
+#doc .katex .text,
+#doc .katex .mord.text {
+  font-family: KaTeX_Main, "Times New Roman", "Songti SC", "Noto Serif CJK SC", "SimSun", serif;
+}
+
+/*
+ * highlight.js colors from VS Code media/highlight.css.
+ * Dark defaults follow Visual Studio 2015 (Nicolas LLOBERA).
+ * Light overrides follow the Visual Studio style (Jason Diamond).
+ */
+
+.hljs-keyword,
+.hljs-literal,
+.hljs-symbol,
+.hljs-name { color: #569cd6; }
+.hljs-link { color: #569cd6; text-decoration: underline; }
+.hljs-built_in,
+.hljs-type { color: #4ec9b0; }
+.hljs-number,
+.hljs-class { color: #b8d7a3; }
+.hljs-string,
+.hljs-meta-string { color: #d69d85; }
+.hljs-regexp,
+.hljs-template-tag { color: #9a5334; }
+.hljs-subst,
+.hljs-function,
+.hljs-title,
+.hljs-params,
+.hljs-formula { color: #dcdcdc; }
+.hljs-comment,
+.hljs-quote { color: #57a64a; font-style: italic; }
+.hljs-doctag { color: #608b4e; }
+.hljs-meta,
+.hljs-meta-keyword,
+.hljs-tag { color: #9b9b9b; }
+.hljs-variable,
+.hljs-template-variable { color: #bd63c5; }
+.hljs-attr,
+.hljs-attribute,
+.hljs-builtin-name { color: #9cdcfe; }
+.hljs-section { color: gold; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+.hljs-bullet,
+.hljs-selector-tag,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo { color: #d7ba7d; }
+
+.vscode-light .hljs-function,
+.vscode-light .hljs-params,
+.vscode-light .hljs-number,
+.vscode-light .hljs-class { color: inherit; }
+.vscode-light .hljs-comment,
+.vscode-light .hljs-quote,
+.vscode-light .hljs-number,
+.vscode-light .hljs-class,
+.vscode-light .hljs-variable { color: #008000; }
+.vscode-light .hljs-keyword,
+.vscode-light .hljs-selector-tag,
+.vscode-light .hljs-name,
+.vscode-light .hljs-tag { color: #00f; }
+.vscode-light .hljs-built_in,
+.vscode-light .hljs-builtin-name { color: #007acc; }
+.vscode-light .hljs-string,
+.vscode-light .hljs-section,
+.vscode-light .hljs-attribute,
+.vscode-light .hljs-literal,
+.vscode-light .hljs-template-tag,
+.vscode-light .hljs-template-variable,
+.vscode-light .hljs-type { color: #a31515; }
+.vscode-light .hljs-subst,
+.vscode-light .hljs-selector-attr,
+.vscode-light .hljs-selector-pseudo,
+.vscode-light .hljs-meta,
+.vscode-light .hljs-meta-keyword { color: #2b91af; }
+.vscode-light .hljs-title,
+.vscode-light .hljs-doctag { color: #808080; }
+.vscode-light .hljs-attr { color: #f00; }
+.vscode-light .hljs-symbol,
+.vscode-light .hljs-bullet,
+.vscode-light .hljs-link { color: #00b0e8; }
+.vscode-light .hljs-emphasis { font-style: italic; }
+.vscode-light .hljs-strong { font-weight: bold; }
