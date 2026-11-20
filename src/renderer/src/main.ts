@@ -378,6 +378,7 @@ api.onMenu((action) => {
     const tab = tabs[active]
     if (tab) api.reloadFile(tab.path)
   } else if (action === 'toggle-toc') {
+    if (welcomeVisible()) return
     if (document.documentElement.dataset.layout === 'narrow') tocButton.click()
     else api.setShowToc(document.documentElement.dataset.toc !== 'on')
   }
@@ -824,6 +825,7 @@ function showWelcome(): void {
   statusState.textContent = ''
   document.title = '数墨'
   homeButton.setAttribute('aria-current', 'page')
+  paintTocButton()
   clearSource()
   renderToc([])
   renderWelcome()
@@ -889,6 +891,7 @@ async function showActive(jumpToFind: boolean): Promise<void> {
   welcome.hidden = true
   doc.hidden = false
   homeButton.removeAttribute('aria-current')
+  paintTocButton()
   syncSource(tab)
   paintTabs()
   docTitle.hidden = true
@@ -1251,9 +1254,12 @@ function applyChrome(): void {
 
 function paintTocButton(): void {
   const root = document.documentElement
-  const open = root.dataset.layout === 'narrow' ? root.dataset.drawer === 'open' : settings.showToc
+  // The home page has no sidebar, so there is nothing to show or hide.
+  const home = welcomeVisible()
+  const open = !home && (root.dataset.layout === 'narrow' ? root.dataset.drawer === 'open' : settings.showToc)
+  tocButton.disabled = home
   tocButton.classList.toggle('on', open)
-  tocButton.title = open ? '隐藏目录' : '显示目录'
+  tocButton.title = home ? '打开文稿后可显示目录' : open ? '隐藏目录' : '显示目录'
 }
 
 function nextWidth(current: number): number {

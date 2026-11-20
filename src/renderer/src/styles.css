@@ -192,6 +192,12 @@ body.toc-dragging, body.toc-dragging * { cursor: col-resize !important; user-sel
 html[data-toc="off"] .toc-resizer,
 html[data-layout="narrow"] .toc-resizer { display: none; }
 
+/* The home page has no table of contents: drop the sidebar, its handle and
+   the drawer, and let the pane take the whole window. */
+.workspace:has(.welcome:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+.workspace:has(.welcome:not([hidden])) .sidebar,
+.workspace:has(.welcome:not([hidden])) .toc-resizer { display: none !important; }
+
 /* ── Sidebar ────────────────────────────────────────────── */
 
 .sidebar {
@@ -369,7 +375,8 @@ html[data-glass="on"] .topbar { -webkit-app-region: drag; pointer-events: auto; 
 /* With the sidebar gone the traffic lights sit over the pane. They end at
    x≈72 in the window; 88px inside the pane leaves a 24px gap after them. */
 html[data-glass="on"][data-toc="off"] .topbar,
-html[data-glass="on"][data-layout="narrow"] .topbar { padding-left: 88px; }
+html[data-glass="on"][data-layout="narrow"] .topbar,
+html[data-glass="on"] .pane:has(.welcome:not([hidden])) .topbar { padding-left: 88px; }
 
 .capsule {
   display: flex;

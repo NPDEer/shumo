@@ -804,6 +804,8 @@ async function roundTripWelcome(win: BrowserWindow, shotDir: string, report: Rec
       sourceText: document.getElementById('source-view')?.textContent ?? '',
       finderHidden: document.getElementById('finder')?.hidden === true,
       tocLinks: document.querySelectorAll('#toc a').length,
+      sidebarShown: getComputedStyle(document.querySelector('.sidebar')).display !== 'none',
+      tocButtonDisabled: document.getElementById('btn-toc')?.disabled === true,
       label: brand?.getAttribute('aria-label'),
       title: brand?.getAttribute('title'),
       tag: brand?.tagName,
@@ -813,6 +815,9 @@ async function roundTripWelcome(win: BrowserWindow, shotDir: string, report: Rec
   report.home = home
   if (!home.welcome || home.tabs !== 1 || home.selected !== 0 || !home.docHidden || home.docText.includes('谱方法') || !home.sourceDisabled || home.sourcePressed !== 'false' || !home.sourceHidden || home.sourceText !== '' || !home.finderHidden || home.tocLinks !== 0) {
     throw new Error(`返回首页没有保留标签：${JSON.stringify(home)}`)
+  }
+  if (home.sidebarShown || !home.tocButtonDisabled) {
+    throw new Error(`首页不应显示目录栏：${JSON.stringify(home)}`)
   }
   if (home.label !== '返回首页' || home.title !== '返回首页' || home.tag !== 'BUTTON' || home.region !== 'no-drag') {
     throw new Error(`首页按钮不可用：${JSON.stringify(home)}`)
@@ -848,9 +853,11 @@ async function roundTripWelcome(win: BrowserWindow, shotDir: string, report: Rec
     welcomeHidden: document.getElementById('welcome')?.hidden === true,
     text: document.body.innerText.includes('谱方法'),
     selected: document.querySelector('#tabs .tab.active .tab-name')?.textContent ?? '',
-    sourcePressed: document.getElementById('btn-source')?.getAttribute('aria-pressed')
+    sourcePressed: document.getElementById('btn-source')?.getAttribute('aria-pressed'),
+    sidebarShown: getComputedStyle(document.querySelector('.sidebar')).display !== 'none',
+    tocButtonEnabled: document.getElementById('btn-toc')?.disabled === false
   })`)
-  if (!restored.welcomeHidden || !restored.text || !String(restored.selected).includes('谱方法') || restored.sourcePressed !== 'false') {
+  if (!restored.welcomeHidden || !restored.text || !String(restored.selected).includes('谱方法') || restored.sourcePressed !== 'false' || !restored.sidebarShown || !restored.tocButtonEnabled) {
     throw new Error(`从首页点标签没有回到预览：${JSON.stringify(restored)}`)
   }
   await shot(win, path.join(shotDir, 'shumo_v110_home_back.png'))
