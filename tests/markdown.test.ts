@@ -11,6 +11,7 @@ import { markdownSanitizeConfig } from '../src/shared/sanitize.ts'
 import { decodePath, encodePath, localImageUrl, resolveAgainst } from '../src/shared/pathutil.ts'
 import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor, type RecentItem } from '../src/shared/types.ts'
 import { removeRecent } from '../src/shared/recent.ts'
+import { TOC_WIDTH_DEFAULT, clampTocWidth } from '../src/shared/layout.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sample = fs.readFileSync(path.join(root, 'samples', 'sample.md'), 'utf8')
@@ -457,4 +458,21 @@ test('removing a recent file drops only that entry and keeps the order', () => {
 test('removing a path that is not in the recent list changes nothing', () => {
   const list = [recentItem('/a.md')]
   assert.deepEqual(removeRecent(list, '/missing.md'), list)
+})
+
+test('sidebar width keeps a dragged value inside the allowed range', () => {
+  assert.equal(clampTocWidth(300, 1440), 300)
+})
+
+test('sidebar width never drops below its minimum', () => {
+  assert.equal(clampTocWidth(40, 1440), 180)
+})
+
+test('sidebar width is capped by 420px and by 40% of the window', () => {
+  assert.equal(clampTocWidth(900, 1440), 420)
+  assert.equal(clampTocWidth(400, 800), 320)
+})
+
+test('sidebar width falls back to the default for unusable values', () => {
+  assert.equal(clampTocWidth(Number.NaN, 1440), TOC_WIDTH_DEFAULT)
 })

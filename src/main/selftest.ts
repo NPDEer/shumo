@@ -157,6 +157,7 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     report.light = light
     assertLight(light)
     await exercise(win, report)
+    await exerciseTocResize(win, report)
     await win.webContents.executeJavaScript(
       `document.getElementById('scroller').scrollTop = 0; document.getElementById('finder').hidden = true;`
     )
@@ -411,6 +412,46 @@ async function exercise(win: BrowserWindow, report: Record<string, unknown>): Pr
   if (!jump || typeof jump !== 'object' || !(jump as { moved?: boolean }).moved) {
     throw new Error(`目录跳转失败：${JSON.stringify(jump)}`)
   }
+}
+
+async function exerciseTocResize(win: BrowserWindow, report: Record<string, unknown>): Promise<void> {
+  const result = await win.webContents.executeJavaScript(`(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const handle = document.getElementById('toc-resizer')
+    const sidebar = document.querySelector('.sidebar')
+    const width = () => Math.round(sidebar.getBoundingClientRect().width)
+    const drag = async (toX) => {
+      const box = handle.getBoundingClientRect()
+      const y = box.top + box.height / 2
+      const opts = (x) => ({ bubbles: true, pointerId: 7, button: 0, clientX: x, clientY: y })
+      handle.dispatchEvent(new PointerEvent('pointerdown', opts(box.left + box.width / 2)))
+      handle.dispatchEvent(new PointerEvent('pointermove', opts(toX)))
+      handle.dispatchEvent(new PointerEvent('pointerup', opts(toX)))
+      await frame()
+    }
+    const start = width()
+    await drag(sidebar.getBoundingClientRect().left + 320 + handle.offsetWidth / 2)
+    const dragged = width()
+    const saved = localStorage.getItem('shumo.tocWidth')
+    await drag(window.innerWidth - 40)
+    const capped = width()
+    handle.focus()
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    await frame()
+    const keyed = width()
+    handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    await frame()
+    return { start, dragged, saved, capped, keyed, reset: width(), innerWidth: window.innerWidth, pane: Math.round(document.querySelector('.pane').getBoundingClientRect().width) }
+  })()`)
+  report.tocResize = result
+  const maxWidth = Math.min(420, Math.floor(result.innerWidth * 0.4))
+  if (result.start !== 236) throw new Error(`目录默认宽度不是 236：${JSON.stringify(result)}`)
+  if (Math.abs(result.dragged - 320) > 2 || Number(result.saved) !== result.dragged) {
+    throw new Error(`拖动没有改变并记住目录宽度：${JSON.stringify(result)}`)
+  }
+  if (result.capped !== maxWidth) throw new Error(`目录宽度没有被限制在 ${maxWidth}：${JSON.stringify(result)}`)
+  if (result.keyed !== maxWidth - 16) throw new Error(`方向键没有微调目录宽度：${JSON.stringify(result)}`)
+  if (result.reset !== 236) throw new Error(`双击没有恢复默认目录宽度：${JSON.stringify(result)}`)
 }
 
 async function applyTheme(win: BrowserWindow, theme: 'light' | 'dark'): Promise<void> {

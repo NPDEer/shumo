@@ -7,6 +7,7 @@ import './styles.css'
 import './preview.css'
 import { renderMarkdown } from '../../shared/markdown'
 import { lineAtOffset, offsetForLine, type LinePoint } from '../../shared/scrollsync'
+import { TOC_WIDTH_DEFAULT, TOC_WIDTH_MIN, clampTocWidth } from '../../shared/layout'
 import { markdownSanitizeConfig } from '../../shared/sanitize'
 import { dirname, localImageUrl, resolveAgainst } from '../../shared/pathutil'
 import {
@@ -64,6 +65,7 @@ appRoot.innerHTML = `
       <div class="sidebar-head" aria-hidden="true"></div>
       <nav id="toc" class="toc" aria-label="目录"></nav>
     </aside>
+    <div id="toc-resizer" class="toc-resizer" role="separator" aria-orientation="vertical" aria-label="调整目录宽度" title="拖动调整目录宽度，双击恢复默认" tabindex="0"></div>
     <main class="pane">
       <div id="reader" class="reader">
         <div id="scroller" class="scroller">
@@ -136,6 +138,8 @@ const reader = must('#reader')
 const sourceSplit = must('#source-split')
 const sourcePane = must('#source-pane')
 const sourceView = must('#source-view') as HTMLPreElement
+const sidebar = must('.sidebar')
+const tocResizer = must('#toc-resizer')
 
 const SOURCE_RATIO_KEY = 'shumo.sourceRatio'
 const SOURCE_MIN = 120
@@ -152,6 +156,9 @@ let pendingFollow: 'preview' | 'source' | null = null
 let rendering = false
 let stickSource = false
 let sourceMeasure: { key: string; origin: number; lh: number } | null = null
+const TOC_WIDTH_KEY = 'shumo.tocWidth'
+let tocWidth = loadTocWidth()
+let tocDrag: (() => void) | null = null
 
 applyChrome()
 welcome.innerHTML = welcomeHtml()
@@ -172,8 +179,13 @@ sourceButton.addEventListener('click', () => {
   if (sourceOpen) requestAnimationFrame(() => alignSourceToPreview())
 })
 sourceSplit.addEventListener('pointerdown', startSourceDrag)
+tocResizer.addEventListener('pointerdown', startTocDrag)
+tocResizer.addEventListener('keydown', onTocResizerKey)
+tocResizer.addEventListener('dblclick', () => setTocWidth(TOC_WIDTH_DEFAULT))
+applyTocWidth()
 sourceSplit.addEventListener('keydown', onSourceSplitKey)
 window.addEventListener('resize', () => {
+  applyTocWidth()
   sourceMeasure = null
   stickSource = false
   if (!sourceOpen) return
@@ -696,6 +708,88 @@ function onSourceSplitKey(event: KeyboardEvent): void {
   sourceRatio = left / available
   saveSourceRatio()
   applySourceSplit()
+}
+
+function loadTocWidth(): number {
+  try {
+    const raw = localStorage.getItem(TOC_WIDTH_KEY)
+    if (raw !== null) return Number(raw)
+  } catch {
+    // A blocked store still opens the sidebar at the default width.
+  }
+  return TOC_WIDTH_DEFAULT
+}
+
+/** Paint the stored width, clamped to what this window can spare. */
+function applyTocWidth(): void {
+  const width = clampTocWidth(tocWidth, window.innerWidth)
+  document.documentElement.style.setProperty('--toc-width', `${width}px`)
+  tocResizer.setAttribute('aria-valuemin', String(TOC_WIDTH_MIN))
+  tocResizer.setAttribute('aria-valuemax', String(clampTocWidth(Infinity, window.innerWidth)))
+  tocResizer.setAttribute('aria-valuenow', String(width))
+  if (sourceOpen) {
+    sourceMeasure = null
+    applySourceSplit()
+  }
+}
+
+function setTocWidth(width: number): void {
+  tocWidth = clampTocWidth(width, window.innerWidth)
+  try {
+    localStorage.setItem(TOC_WIDTH_KEY, String(tocWidth))
+  } catch {
+    // The new width still applies to this window.
+  }
+  applyTocWidth()
+}
+
+function startTocDrag(event: PointerEvent): void {
+  if (event.button !== 0) return
+  event.preventDefault()
+  tocDrag?.()
+  const pointerId = event.pointerId
+  try {
+    tocResizer.setPointerCapture(pointerId)
+  } catch {
+    // Untrusted test events still drive the listeners below.
+  }
+  document.body.classList.add('toc-dragging')
+  const move = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return
+    // The pointer sits in the middle of the gap right of the sidebar.
+    setTocWidth(ev.clientX - sidebar.getBoundingClientRect().left - tocResizer.offsetWidth / 2)
+  }
+  const up = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return
+    tocDrag?.()
+  }
+  tocResizer.addEventListener('pointermove', move)
+  tocResizer.addEventListener('pointerup', up)
+  tocResizer.addEventListener('pointercancel', up)
+  tocDrag = () => {
+    tocResizer.removeEventListener('pointermove', move)
+    tocResizer.removeEventListener('pointerup', up)
+    tocResizer.removeEventListener('pointercancel', up)
+    try {
+      if (tocResizer.hasPointerCapture(pointerId)) tocResizer.releasePointerCapture(pointerId)
+    } catch {
+      // Already released.
+    }
+    document.body.classList.remove('toc-dragging')
+    tocDrag = null
+  }
+}
+
+function onTocResizerKey(event: KeyboardEvent): void {
+  if (event.isComposing) return
+  const step = event.shiftKey ? 48 : 16
+  const current = clampTocWidth(tocWidth, window.innerWidth)
+  if (event.key === 'ArrowLeft') setTocWidth(current - step)
+  else if (event.key === 'ArrowRight') setTocWidth(current + step)
+  else if (event.key === 'Home') setTocWidth(TOC_WIDTH_MIN)
+  else if (event.key === 'End') setTocWidth(Infinity)
+  else return
+  event.preventDefault()
 }
 
 function welcomeHtml(): string {
