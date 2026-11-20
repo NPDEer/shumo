@@ -559,7 +559,28 @@ html[data-glass="on"][data-layout="narrow"] .topbar { padding-left: 72px; }
   padding: 7px 10px;
   margin: 0;
 }
-.recent-item:hover, .recent-item:focus-visible { background: var(--hover); }
+.recent-row { position: relative; }
+.recent-row:hover .recent-item, .recent-item:focus-visible { background: var(--hover); }
+.recent-row .recent-item { padding-right: 40px; }
+.recent-remove {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+}
+.recent-remove .icon { width: 10px; height: 10px; stroke-width: 1.8; }
+.recent-row:hover .recent-remove, .recent-remove:focus-visible { opacity: 1; }
+.recent-remove:hover { background: var(--pressed); color: var(--text); }
 .recent-item .doc-icon {
   grid-row: 1 / span 2;
   width: 20px;

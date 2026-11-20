@@ -100,6 +100,9 @@ const api = {
   openExternal(url: string): void {
     ipcRenderer.send('open-external', url)
   },
+  removeRecent(filePath: string): void {
+    ipcRenderer.send('remove-recent', filePath)
+  },
   setTheme(theme: Bootstrap['settings']['theme']): void {
     ipcRenderer.send('set-theme', theme)
   },

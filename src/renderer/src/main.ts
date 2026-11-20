@@ -752,7 +752,19 @@ function renderWelcome(): void {
     button.insertAdjacentHTML('afterbegin', icons.doc)
     button.append(name, hint)
     button.addEventListener('click', () => api.openRelative(item.path, item.path))
-    list.append(button)
+    // A sibling, not a child: a button cannot contain another button.
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'recent-remove'
+    remove.title = '从最近打开中移除'
+    remove.setAttribute('aria-label', `从最近打开中移除 ${item.title}`)
+    remove.innerHTML = icons.close
+    // The list re-renders from the settings broadcast that follows.
+    remove.addEventListener('click', () => api.removeRecent(item.path))
+    const row = document.createElement('div')
+    row.className = 'recent-row'
+    row.append(button, remove)
+    list.append(row)
   }
 }
 

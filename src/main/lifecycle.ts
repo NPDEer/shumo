@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { reloadPassesStarted, watchCount } from './files'
+import { getSettings } from './settings'
 
 export type LifecycleHooks = {
   createWindow: (files: string[]) => BrowserWindow
@@ -148,6 +149,20 @@ export async function runLifecycleTest(hooks: LifecycleHooks): Promise<void> {
   )
   expectWindows(1, '点关闭按钮回到欢迎页')
   expectWatches(0, '点关闭按钮回到欢迎页')
+
+  const realB = fs.realpathSync(fileB)
+  const recentBefore = getSettings().recent.length
+  if (!getSettings().recent.some((item) => item.path === realB)) throw new Error('乙稿没有记进最近打开')
+  await assertJs(win, `document.querySelectorAll('#recent-list .recent-row').length === ${recentBefore}`)
+  await win.webContents.executeJavaScript(
+    `[...document.querySelectorAll('#recent-list .recent-row')].find((row) => row.textContent.includes('乙稿')).querySelector('.recent-remove').click()`
+  )
+  await poll(
+    win,
+    `document.querySelectorAll('#recent-list .recent-row').length === ${recentBefore - 1} && ![...document.querySelectorAll('#recent-list .recent-name')].some((node) => node.textContent.includes('乙稿'))`
+  )
+  if (getSettings().recent.some((item) => item.path === realB)) throw new Error('移除后设置里仍有乙稿')
+  if (getSettings().recent.length !== recentBefore - 1) throw new Error('移除最近打开时误删了其他条目')
 
   app.once('will-quit', () => {
     console.log('LIFECYCLE ok')

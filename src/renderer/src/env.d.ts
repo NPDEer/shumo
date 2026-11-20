@@ -15,6 +15,7 @@ export type ShumoApi = {
   openDialog: () => void
   openRelative: (from: string, href: string) => void
   openExternal: (url: string) => void
+  removeRecent: (filePath: string) => void
   setTheme: (theme: Bootstrap['settings']['theme']) => void
   setFontSize: (size: number) => void
   setContentWidth: (width: number) => void

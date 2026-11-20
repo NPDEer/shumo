@@ -9,7 +9,8 @@ import { renderMarkdown } from '../src/shared/markdown.ts'
 import { lineAtOffset, linePoints, offsetForLine } from '../src/shared/scrollsync.ts'
 import { markdownSanitizeConfig } from '../src/shared/sanitize.ts'
 import { decodePath, encodePath, localImageUrl, resolveAgainst } from '../src/shared/pathutil.ts'
-import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor } from '../src/shared/types.ts'
+import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor, type RecentItem } from '../src/shared/types.ts'
+import { removeRecent } from '../src/shared/recent.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sample = fs.readFileSync(path.join(root, 'samples', 'sample.md'), 'utf8')
@@ -442,4 +443,18 @@ test('other platforms keep an opaque window background', () => {
   assert.equal(usesGlass('win32'), false)
   assert.equal(windowBackgroundFor('win32', 'dark'), WINDOW_BACKGROUND.dark)
   assert.equal(windowBackgroundFor('linux', 'light'), WINDOW_BACKGROUND.light)
+})
+
+function recentItem(filePath: string): RecentItem {
+  return { path: filePath, title: filePath, hint: filePath, openedAt: 1 }
+}
+
+test('removing a recent file drops only that entry and keeps the order', () => {
+  const list = [recentItem('/a.md'), recentItem('/b.md'), recentItem('/c.md')]
+  assert.deepEqual(removeRecent(list, '/b.md').map((item) => item.path), ['/a.md', '/c.md'])
+})
+
+test('removing a path that is not in the recent list changes nothing', () => {
+  const list = [recentItem('/a.md')]
+  assert.deepEqual(removeRecent(list, '/missing.md'), list)
 })

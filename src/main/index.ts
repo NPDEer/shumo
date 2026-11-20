@@ -15,6 +15,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { isMarkdownFile } from '../shared/pathutil'
+import { removeRecent } from '../shared/recent'
 import {
   usesGlass,
   windowBackgroundFor,
@@ -242,6 +243,13 @@ function installIpc(): void {
     if (typeof url === 'string' && isExternal(url)) void shell.openExternal(url)
   })
 
+  ipcMain.on('remove-recent', (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string') return
+    updateSettings({ recent: removeRecent(getSettings().recent, filePath) })
+    broadcastSettings()
+    refreshMenu()
+  })
+
   ipcMain.on('set-theme', (_event, theme: unknown) => {
     if (!isTheme(theme)) return
     updateSettings({ theme })
@@ -411,7 +419,7 @@ async function openDialog(win: BrowserWindow | null): Promise<void> {
 async function openRecent(filePath: string): Promise<void> {
   const win = liveWindow(BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0])
   if (!canonical(filePath)) {
-    updateSettings({ recent: getSettings().recent.filter((item) => item.path !== filePath) })
+    updateSettings({ recent: removeRecent(getSettings().recent, filePath) })
     refreshMenu()
     broadcastSettings()
     const missing = { type: 'warning' as const, message: '找不到文件' }
@@ -445,7 +453,7 @@ function rememberRecent(file: OpenedFile): void {
       hint: shortenPath(file.path),
       openedAt: Date.now()
     },
-    ...getSettings().recent.filter((item) => item.path !== file.path)
+    ...removeRecent(getSettings().recent, file.path)
   ].slice(0, 10)
   updateSettings({ recent })
   broadcastSettings()
