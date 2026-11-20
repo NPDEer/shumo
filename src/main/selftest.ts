@@ -168,6 +168,20 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     })()`)
     await pause(150)
     await shot(win, path.join(shotDir, 'shumo_v110_light_code.png'))
+    const algorithm = await win.webContents.executeJavaScript(`(() => {
+      const block = document.querySelector('.algorithm-block')
+      block?.scrollIntoView({ block: 'center', behavior: 'auto' })
+      return block ? {
+        caption: block.querySelector('.ps-algorithm > .ps-line')?.textContent?.trim() ?? '',
+        lineNumbers: block.querySelectorAll('.ps-linenum').length,
+        overflow: block.scrollWidth - block.clientWidth
+      } : null
+    })()`)
+    report.algorithm = algorithm
+    if (!algorithm || !algorithm.caption.startsWith('算法 1')) throw new Error(`算法块没有排版：${JSON.stringify(algorithm)}`)
+    if (algorithm.lineNumbers < 5 || algorithm.overflow > 1) throw new Error(`算法块排版异常：${JSON.stringify(algorithm)}`)
+    await pause(150)
+    await shot(win, path.join(shotDir, 'shumo_v110_light_algorithm.png'))
     await win.webContents.executeJavaScript(`document.getElementById('scroller').scrollTop = 0`)
 
     await applyTheme(win, 'dark')
@@ -186,6 +200,11 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     })()`)
     await pause(200)
     await shot(win, path.join(shotDir, 'shumo_v110_dark_mermaid.png'))
+    await win.webContents.executeJavaScript(
+      `document.querySelector('.algorithm-block')?.scrollIntoView({ block: 'center', behavior: 'auto' })`
+    )
+    await pause(150)
+    await shot(win, path.join(shotDir, 'shumo_v110_dark_algorithm.png'))
 
     await win.webContents.executeJavaScript(`(() => {
       document.querySelector('.markdown-alert-note')?.scrollIntoView({ block: 'center', behavior: 'auto' })

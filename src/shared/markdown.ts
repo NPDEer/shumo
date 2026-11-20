@@ -30,6 +30,7 @@ import css from 'highlight.js/lib/languages/css'
 import diff from 'highlight.js/lib/languages/diff'
 import type { Heading } from './types'
 import { encodePath } from './pathutil'
+import { isAlgorithmFence, typesetAlgorithm } from './algorithm'
 
 hljs.registerLanguage('python', python)
 hljs.registerLanguage('javascript', javascript)
@@ -396,6 +397,8 @@ function createMarkdown(headings: Heading[]) {
     return self.renderToken(tokens, idx, options)
   }
 
+  // Algorithm captions are numbered through the whole document.
+  let algorithmCaptions = 0
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx]
     if (!token) return ''
@@ -407,6 +410,13 @@ function createMarkdown(headings: Heading[]) {
     if (lang === 'mermaid') {
       const source = token.content.replace(/\n$/, '')
       return `<div class="mermaid-block${lineClass}"${lineAttr} data-source="${encodePath(source)}"><pre class="mermaid">${escapeHtml(source)}</pre></div>\n`
+    }
+    if (isAlgorithmFence(lang, token.content)) {
+      const algorithm = typesetAlgorithm(token.content, algorithmCaptions, katexOptions)
+      if (algorithm) {
+        algorithmCaptions += algorithm.captions
+        return `<div class="algorithm-block${lineClass}"${lineAttr}>${algorithm.html}</div>\n`
+      }
     }
     const highlighted = highlightCode(token.content.replace(/\n$/, ''), lang)
     const klass = lang ? ` class="hljs language-${escapeHtml(lang)}${lineClass}"` : ` class="hljs${lineClass}"`

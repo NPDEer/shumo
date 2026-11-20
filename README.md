@@ -16,6 +16,7 @@ Markdown All in One（[yzhang-gh/vscode-markdown](https://github.com/yzhang-gh/v
 | `markdown-it-task-lists` | 2.1.1 | ISC | `{ enabled: true }`，勾选框样式沿用 All in One 的 `media/checkbox.css` |
 | `markdown-it` | 15 | MIT | All in One 声明 `^13`，VS Code 主线预览声明 `^14`。插件声明兼容 `markdown-it >= 13`，所以数墨留在 15 |
 | VS Code `markdown.css` | 主线 `extensions/markdown-language-features/media` | MIT，Microsoft | `src/renderer/src/preview.css` 最初从这里改写，块间距、表格与代码的溢出处理、文首表格等结构规则沿用至今，文件头保留版权声明。字号、间距和配色已重新设计；语法色改为接近 Xcode 默认主题的自绘配色，不再使用 `highlight.css` |
+| `pseudocode`（pseudocode.js） | 2.4.1 | MIT，Saswat Padhi | ` ```latex ` 围栏里有 `\begin{algorithmic}` 时排成算法框（`src/shared/algorithm.ts`）。先删去整行 `%` 注释和 `[H]`、`[1]` 这类环境选项；写了 `[1]` 才编号。公式交给数墨的 KaTeX、带同样的选项。包里的 `require('mathjax')` 在打包时换成会报错的空模块，2.4.1 里未声明的 `attrVal` 在严格模式的打包结果里会抛错，由 `electron.vite.config.ts` 的插件补上 `var`。样式是数墨自己写的，不用包里的 CSS。解析失败时退回语法高亮的源码 |
 | `normalizeHighlightLang` | 同目录 `markdownEngine.ts` | MIT，Microsoft | `shell`→`sh`、`py3`→`python`、`tsx`→`jsx`、`jsonc`→`json`、`csharp`→`cs`。本构建没有单独的 jsx 语法，所以 `jsx` 这个名字登记的是 TypeScript 语法 |
 
 和在 VS Code 里打开 All in One 相比，这些是故意留下的差别：
@@ -24,7 +25,7 @@ Markdown All in One（[yzhang-gh/vscode-markdown](https://github.com/yzhang-gh/v
 - KaTeX 额外固定 `trust: false`、`output: "html"`、`strict: "ignore"`。All in One 只传了 `throwOnError: false`，`trust` 的默认值本来就是 false。
 - `$` 和 `$$` 完全走上游插件。`\(...\)`、`\[...\]` 以及 `align` / `equation` / `pmatrix` 这类环境是数墨加的分隔符，仍交给同一个 KaTeX 渲染函数。上游插件本身不认这些写法。
 - 文首 `---` 表格对应 VS Code 预览设置 `markdown.preview.frontMatter = table` 的行为，不是把依赖 `vscode` API 的 `yamlPreamble.ts` 原文件搬进来。
-- 脚注、Mermaid、本机图片协议、目录、文内查找和窄窗口滚动是数墨自己的。VS Code 预览和 All in One 都不负责这些。
+- 脚注、Mermaid、算法框、本机图片协议、目录、文内查找和窄窗口滚动是数墨自己的。VS Code 预览和 All in One 都不负责这些。
 - Markdown All in One 3.6.3 的 `extendMarkdownIt` 只调用 `markdown-it-github-alerts`。它没有 `example`、`info`，也没有 `[!type]+` / `[!type]-` 折叠。`markdown-it-obsidian-callouts` 0.3.5（Apache-2.0）能认 Obsidian 类型和 `<details>`，但没有直接采用：它把 `important` 并进 tip、把 `caution` 并进 warning，会换掉现有的五种 GitHub 提示；它还会改写 `ad-` 开头的围栏，并把围栏里的 `icon:` 原文插进 HTML；图标是 Lucide 的 `rect` / `line` / `circle`，过不了这里只放行 `svg` 和 `path` 的过滤。折叠和其余类型因此做在数墨自己的块级 token 上。
 - 支持的类型是 note、abstract（summary、tldr）、info、todo、tip（hint）、important、success（check、done）、question（help、faq）、warning（attention）、caution、failure（fail、missing）、danger（error）、bug、example、quote（cite）。`[!important]` 和 `[!caution]` 仍是 GitHub 的那两种，不按 Obsidian 别名合并。没写标题时，摘要默认是「摘要」，示例默认是「示例」，信息默认是「信息」；五种 GitHub 提示仍用 Note、Tip、Important、Warning、Caution。自定义标题按行内 Markdown 渲染，可以含公式，不插入原始 HTML。
 - 没有 `+` / `-` 的提示块不能折叠。`[!info]+` 用 `<details open>`，默认展开；`[!info]-` 用没有 `open` 的 `<details>`，默认收起。开关是 `<summary>` 自己的键盘行为，没有内联事件。不认识的 `[!名字]` 收成中性提示块，正文照常渲染。标记必须在引用第一行开头；行内、代码和围栏里的同名文字保持原文。

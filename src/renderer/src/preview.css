@@ -11,6 +11,8 @@
  * Task-list checkbox placement follows Markdown All in One media/checkbox.css
  * (https://github.com/yzhang-gh/vscode-markdown), MIT License.
  *
+ * Algorithm boxes use pseudocode.js (https://github.com/SaswatPadhi/pseudocode.js), MIT License.
+ *
  * Syntax colors are written for this app and loosely follow the Xcode default themes.
  *--------------------------------------------------------------------------------------------*/
 
@@ -554,3 +556,70 @@ html.dark .hljs-selector-pseudo { color: #acf2e4; }
 html.dark .hljs-link { color: #6699ff; }
 html.dark .hljs-addition { color: #32d74b; background: rgba(50, 215, 75, 0.12); }
 html.dark .hljs-deletion { color: #ff6961; background: rgba(255, 105, 97, 0.12); }
+
+/* Typeset algorithms (```latex blocks with an algorithmic environment). The class
+ * names are pseudocode.js's; these rules replace its stylesheet, with booktabs-style
+ * rules as in a typeset paper. */
+#doc .algorithm-block {
+  margin: 0.2em 0 1.4em;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+#doc .ps-root {
+  font-size: 0.9375em;
+  line-height: 1.6;
+}
+#doc .ps-root .ps-algorithm {
+  margin: 0 0 0.9em;
+  border-top: 1.5px solid var(--heading);
+  border-bottom: 1px solid var(--heading);
+}
+#doc .ps-root .ps-algorithm:last-child {
+  margin-bottom: 0;
+}
+#doc .ps-root .ps-algorithm.with-caption > .ps-line:first-child {
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--heading);
+}
+#doc .ps-root .ps-algorithmic {
+  padding: 0.35em 0 0.45em;
+}
+#doc .ps-root .ps-line {
+  margin: 0;
+  line-height: 1.6;
+}
+#doc .ps-root .ps-keyword {
+  font-weight: 600;
+  color: var(--heading);
+}
+#doc .ps-root .ps-funcname {
+  font-variant: small-caps;
+}
+#doc .ps-root .ps-comment {
+  float: right;
+  margin-left: 1.5em;
+  color: var(--muted);
+}
+#doc .ps-root .katex {
+  font-size: 1.05em;
+  text-indent: 0;
+}
+#doc .ps-root .ps-linenum {
+  display: inline-block;
+  position: relative;
+  width: 1.6em;
+  padding-right: 0.5em;
+  font-size: 0.8em;
+  line-height: 1em;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+#doc .ps-root .ps-algorithmic.with-linenum .ps-line.ps-code {
+  text-indent: -1.6em;
+}
+#doc .ps-root .ps-algorithmic.with-linenum .ps-line.ps-code > span {
+  text-indent: 0;
+}

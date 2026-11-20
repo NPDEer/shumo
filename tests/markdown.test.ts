@@ -476,3 +476,68 @@ test('sidebar width is capped by 420px and by 40% of the window', () => {
 test('sidebar width falls back to the default for unusable values', () => {
   assert.equal(clampTocWidth(Number.NaN, 1440), TOC_WIDTH_DEFAULT)
 })
+
+const algorithmFence = [
+  '```latex',
+  '% 需要：\\usepackage{algorithm} \\usepackage{algpseudocode}',
+  '\\begin{algorithm}[H]',
+  '\\caption{精确瞬时 Jacobian}',
+  '\\begin{algorithmic}[1]',
+  '\\Require 流体网格；$\\mathbf u^\\ast=\\mathbf 0$',
+  '\\For{$j=1,\\dots,N_\\Sigma$} \\Comment{$N_\\Sigma=1924$ 个界面自由度}',
+  '    \\State $J_{:,j}\\gets\\boldsymbol\\lambda$ \\Comment{$\\boldsymbol\\lambda=J\\mathbf u+(\\text{与 }\\mathbf u\\text{ 无关的部分})$}',
+  '\\EndFor',
+  '\\Ensure $J,\\ M_\\Sigma$',
+  '\\end{algorithmic}',
+  '\\end{algorithm}',
+  '```'
+].join('\n')
+
+test('latex fence with algorithmic is typeset as an algorithm', () => {
+  const safe = clean(renderMarkdown(algorithmFence).html)
+  assert.match(safe, /class="algorithm-block code-line" data-line="0"/)
+  assert.match(safe, /算法 1 [\s\S]*精确瞬时 Jacobian/)
+  assert.match(safe, /ps-keyword">Require/)
+  assert.match(safe, /ps-keyword">for /)
+  assert.match(safe, /ps-comment">▷ [\s\S]*个界面自由度/)
+  assert.match(safe, /ps-linenum"[^>]*>1</)
+  assert.match(safe, /无关的部分/)
+  assert.equal(safe.includes('katex-error'), false)
+  assert.equal(safe.includes('\\usepackage'), false)
+  assert.equal(safe.includes('language-latex'), false)
+})
+
+test('algorithm captions number through the document', () => {
+  const twoBlocks = `${algorithmFence}\n\n${algorithmFence.replace('精确瞬时 Jacobian', '训练数据生成')}`
+  const safe = clean(renderMarkdown(twoBlocks).html)
+  assert.match(safe, /算法 2 [\s\S]*训练数据生成/)
+})
+
+test('algorithm numbering restarts for each document', () => {
+  renderMarkdown(algorithmFence)
+  assert.match(clean(renderMarkdown(algorithmFence).html), /算法 1 /)
+})
+
+test('latex fence without algorithmic stays highlighted source', () => {
+  const safe = clean(renderMarkdown('```latex\n\\begin{equation} x \\end{equation}\n```').html)
+  assert.ok(safe.includes('language-latex'))
+})
+
+test('unparsable algorithm falls back to highlighted source', () => {
+  const broken = '```latex\n\\begin{algorithmic}\n\\For{$i$}\n\\State x\n\\end{algorithmic}\n```'
+  const safe = clean(renderMarkdown(broken).html)
+  assert.ok(safe.includes('language-latex'))
+  assert.equal(safe.includes('ps-root'), false)
+})
+
+test('algorithm text is escaped', () => {
+  const hostile = '```latex\n\\begin{algorithmic}\n\\State <img src=x onerror=alert(1)>\n\\end{algorithmic}\n```'
+  const html = renderMarkdown(hostile).html
+  assert.ok(html.includes('ps-root'))
+  assert.equal(html.includes('<img'), false)
+})
+
+test('typesetting leaves no global katex behind', () => {
+  renderMarkdown(algorithmFence)
+  assert.equal('katex' in globalThis, false)
+})

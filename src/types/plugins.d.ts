@@ -30,3 +30,22 @@ declare module 'markdown-it-task-lists' {
   }>
   export default plugin
 }
+
+declare module 'pseudocode' {
+  const pseudocode: {
+    renderToString(
+      input: string,
+      options?: {
+        lineNumber?: boolean
+        lineNumberPunc?: string
+        noEnd?: boolean
+        indentSize?: string
+        commentDelimiter?: string
+        titlePrefix?: string
+        captionCount?: number
+        scopeLines?: boolean
+      }
+    ): string
+  }
+  export default pseudocode
+}

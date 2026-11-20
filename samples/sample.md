@@ -153,6 +153,25 @@ flowchart TD
   F --> G[估计 L2 误差]
 ```
 
+## 算法
+
+```latex
+% 需要：\usepackage{algorithm} \usepackage{algpseudocode}
+\begin{algorithm}[H]
+\caption{Chebyshev 配点求解 Poisson 方程}
+\begin{algorithmic}[1]
+\Require 节点数 $N$，右端 $f$，边界值 $u(\pm1)=0$
+\State 生成 Chebyshev 节点 $x_j=\cos(j\pi/N)$ \Comment{$j=0,\dots,N$}
+\State 组装求导矩阵 $D$，令 $L\gets D^2$
+\For{$j\in\{0,N\}$} \Comment{边界行}
+    \State $L_{j,:}\gets\mathbf e_j^\top$，$f_j\gets0$
+\EndFor
+\State 解 $L\mathbf u=\mathbf f$
+\Ensure 节点值 $\mathbf u$
+\end{algorithmic}
+\end{algorithm}
+```
+
 ## 节点分布
 
 Chebyshev 节点在端点聚集，这正是谱方法压低 Runge 现象的原因。
