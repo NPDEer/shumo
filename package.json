@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "NODE_OPTIONS='--require ./tests/preload-mhchem.cjs' tsx --test --test-concurrency=1 tests/*.test.ts",
     "dist:mac": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg dir --universal",
+    "install:mac": "npm run dist:mac && node scripts/install-mac.mjs",
     "dist:linux": "npm run build && electron-builder --linux AppImage",
     "dist:win": "npm run build && electron-builder --win nsis",
     "selftest": "npm run build && node scripts/selftest.mjs",

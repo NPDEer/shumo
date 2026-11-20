@@ -66,6 +66,14 @@ npm run dist:mac
 
 完成后看 `release/` 里的 `.dmg`。打开映像，把「数墨」拖进「应用程序」。应用名称是 **数墨.app**。
 
+在本机直接更新已安装的数墨：
+
+```bash
+npm run install:mac
+```
+
+它会打包，正常退出正在运行的数墨，把 `/Applications/数墨.app` 旧版移到废纸篓（可「放回原处」），装上新版，原来开着的话再重新打开。整台电脑只保留一个数墨。
+
 这台开发机是 Linux，签不出 macOS 安装包。仓库里的 GitHub Actions（`.github/workflows/build.yml`）会在 `macos-latest` 上跑同一条命令。推送形如 `v1.0.0` 的标签，或在 Actions 页手动运行 **Build**，即可下载 `shumo-macos` 里的 `.dmg`。流水线没有签名证书，产物未签名。
 
 ### 把数墨设成 .md 的默认应用
