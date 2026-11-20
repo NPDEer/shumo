@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { MenuEntry } from '../shared/contextmenu'
 import { usesGlass, windowBackgroundFor, type Bootstrap, type MenuAction, type OpenedFile, type SettingsPayload } from '../shared/types'
 
 type Handler<T> = (payload: T) => void
@@ -99,6 +100,21 @@ const api = {
   },
   openExternal(url: string): void {
     ipcRenderer.send('open-external', url)
+  },
+  revealLink(from: string, href: string): void {
+    ipcRenderer.send('reveal-link', { from, href })
+  },
+  revealPath(filePath: string): void {
+    ipcRenderer.send('reveal-path', filePath)
+  },
+  copyText(text: string): void {
+    ipcRenderer.send('copy-text', text)
+  },
+  copyImageAt(x: number, y: number): void {
+    ipcRenderer.send('copy-image-at', { x, y })
+  },
+  showContextMenu(entries: MenuEntry[]): Promise<string | null> {
+    return ipcRenderer.invoke('context-menu', entries) as Promise<string | null>
   },
   removeRecent(filePath: string): void {
     ipcRenderer.send('remove-recent', filePath)

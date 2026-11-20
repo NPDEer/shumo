@@ -13,12 +13,19 @@ import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor, type RecentItem } fr
 import { removeRecent } from '../src/shared/recent.ts'
 import { TOC_WIDTH_DEFAULT, clampTocWidth } from '../src/shared/layout.ts'
 import { declareUndeclared } from '../scripts/pseudocode-strict.mjs'
+import { classifyLink, linkPath } from '../src/shared/links.ts'
+import { contextMenuItems, isMenuEntries, selectionLabel, type MenuContext, type MenuEntry } from '../src/shared/contextmenu.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sample = fs.readFileSync(path.join(root, 'samples', 'sample.md'), 'utf8')
 
 const dom = new JSDOM('<!doctype html><body></body>')
 const purify = createDOMPurify(dom.window)
+
+/** HTML without the data-tex attributes, i.e. what the reader sees. */
+function withoutTex(html: string): string {
+  return html.replace(/ data-tex="[^"]*"/g, '')
+}
 
 function clean(html: string): string {
   return purify.sanitize(html, markdownSanitizeConfig)
@@ -54,14 +61,14 @@ test('sample renders math, chinese, table, mermaid and code', () => {
   assert.ok(safe.includes('octicon-info'))
   assert.match(safe, /mathrm">H</)
   assert.match(safe, /x-arrow/)
-  assert.equal(safe.includes('\\ce'), false)
+  assert.equal(withoutTex(safe).includes('\\ce'), false)
   assert.equal(safe.includes('( a(u,v)=(f,v) )'), false)
   assert.match(safe, /弱形式写成[\s\S]{0,120}class="katex"/)
   assert.equal(safe.includes('katex-error'), false)
   assert.ok(safe.includes('task-list-item-checkbox'))
   assert.equal(safe.includes('task-list-item-checkbox" disabled'), false)
   assert.equal(safe.includes('<script'), false)
-  const withoutCode = safe
+  const withoutCode = withoutTex(safe)
     .replace(/\saria-label="[^"]*"/g, '')
     .replace(/<pre[\s\S]*?<\/pre>/g, '')
   assert.equal(withoutCode.includes('\\begin{align}'), false)
@@ -137,7 +144,7 @@ test('upstream plugin stack renders the shared preview fixtures', () => {
   assert.match(safe, /language-shell[\s\S]*hljs-built_in/)
   assert.match(safe, /mathrm">H</)
   assert.match(safe, /mathrm">O</)
-  assert.equal(safe.includes('\\ce'), false)
+  assert.equal(withoutTex(safe).includes('\\ce'), false)
   assert.match(safe, /markdown-alert-note/)
   assert.match(safe, /<svg[\s\S]*octicon-info/)
   assert.equal(safe.includes('onerror'), false)
@@ -621,4 +628,100 @@ test('pseudocode.js renders every construct in strict mode once fixed', () => {
 
 test('pseudocode.js still needs the strict-mode fix', () => {
   assert.throws(() => renderStrict((code) => code), ReferenceError)
+})
+
+test('links to anchors, the web, notes and other files are told apart', () => {
+  const kinds = ['#收敛', 'https://katex.org', 'mailto:a@b.c', 'notes/a.md#x', '../b.markdown', 'export_jacobian.py', 'rrfsi/coupling.py', 'file:///tmp/a.pdf', 'C:\\notes\\c.md']
+  assert.deepEqual(kinds.map(classifyLink), ['anchor', 'external', 'external', 'markdown', 'markdown', 'file', 'file', 'file', 'markdown'])
+})
+
+test('script and data links are not followed', () => {
+  assert.deepEqual(['javascript:alert(1)', 'data:text/html,x', 'vbscript:x', '', '?q=1'].map(classifyLink), [
+    'unsupported',
+    'unsupported',
+    'unsupported',
+    'unsupported',
+    'unsupported'
+  ])
+})
+
+test('link path drops fragment and query and decodes', () => {
+  assert.equal(linkPath('%E7%AC%94%E8%AE%B0/a%20b.py?x=1#L3'), '笔记/a b.py')
+})
+
+const view = { atTop: false, tocShown: true, sourceShown: false, theme: 'light' as const }
+
+function ids(context: MenuContext): string[] {
+  return contextMenuItems(context).map((entry: MenuEntry) => ('separator' in entry ? '|' : entry.id))
+}
+
+test('blank document menu offers view and file commands only', () => {
+  assert.deepEqual(ids({ area: 'doc', selection: '', view }), [
+    'scroll-top',
+    'toggle-toc',
+    'toggle-source',
+    'toggle-theme',
+    '|',
+    'reveal-file',
+    'copy-path'
+  ])
+})
+
+test('selected text comes first with copy and find', () => {
+  assert.deepEqual(ids({ area: 'doc', selection: '附加质量', view }).slice(0, 3), ['copy', 'find-selection', '|'])
+})
+
+test('a link to a code file is revealed, never opened', () => {
+  const entries = ids({ area: 'doc', selection: '', link: { href: 'train.py', kind: 'file' }, view })
+  assert.deepEqual(entries.slice(0, 3), ['reveal-link', 'copy-link', '|'])
+})
+
+test('a markdown link opens in a tab', () => {
+  const entries = ids({ area: 'doc', selection: '', link: { href: 'b.md', kind: 'markdown' }, view })
+  assert.deepEqual(entries.slice(0, 3), ['open-link', 'reveal-link', 'copy-link'])
+})
+
+test('a formula offers its latex source', () => {
+  assert.equal(ids({ area: 'doc', selection: '', tex: 'x^2', view })[0], 'copy-tex')
+})
+
+test('an algorithm block offers its latex source', () => {
+  const entries = contextMenuItems({ area: 'doc', selection: '', code: 'algorithm', view })
+  assert.deepEqual(entries[0], { id: 'copy-code', label: '拷贝算法的 LaTeX 源码' })
+})
+
+test('back to top is disabled at the top', () => {
+  const entries = contextMenuItems({ area: 'doc', selection: '', view: { ...view, atTop: true } })
+  assert.deepEqual(entries[0], { id: 'scroll-top', label: '回到顶部', enabled: false })
+})
+
+test('closing other tabs needs another tab', () => {
+  const entries = contextMenuItems({ area: 'tab', tabCount: 1 })
+  assert.deepEqual(entries[1], { id: 'close-other-tabs', label: '关闭其他标签页', enabled: false })
+})
+
+test('source menu names the clicked line', () => {
+  const entries = contextMenuItems({ area: 'source', selection: '', line: 11 })
+  assert.deepEqual(entries.at(-1), { id: 'copy-line-ref', label: '拷贝路径和行号（第 12 行）' })
+})
+
+test('long selections are shortened in the menu label', () => {
+  assert.equal(selectionLabel('一二三四五六七八九十甲乙丙丁'), '一二三四五六七八九十甲乙…')
+})
+
+test('menu entries from the page are checked before use', () => {
+  assert.equal(isMenuEntries(contextMenuItems({ area: 'recent' })), true)
+  assert.equal(isMenuEntries([{ id: 'run-shell', label: 'x' }]), false)
+  assert.equal(isMenuEntries([{ separator: true, id: 'copy' }]), false)
+})
+
+test('inline and display formulas keep their tex source', () => {
+  const safe = clean(renderMarkdown('设 $a<b$。\n\n$$\n\\int_0^1 f\\,dx\n$$').html)
+  assert.match(safe, /class="katex" data-tex="a&lt;b"/)
+  assert.match(safe, /class="katex-display" data-tex="\\int_0\^1 f\\,dx"/)
+})
+
+test('algorithm block keeps its latex source', () => {
+  const safe = clean(renderMarkdown(algorithmFence).html)
+  assert.match(safe, /class="algorithm-block[^"]*"[^>]*data-source="/)
 })

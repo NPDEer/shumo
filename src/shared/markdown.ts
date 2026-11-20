@@ -348,6 +348,12 @@ const katexOptions = {
   output: 'html' as const
 }
 
+/** Adds the formula's TeX to the outermost KaTeX span. */
+function withTex(html: string, tex: string): string {
+  if (!tex) return html
+  return html.replace(/<span class="katex(?:-display|-error)?"/, (open) => `${open} data-tex="${escapeHtml(tex.trim())}"`)
+}
+
 function createMarkdown(headings: Heading[]) {
   const md = new MarkdownIt({
     html: false,
@@ -415,7 +421,8 @@ function createMarkdown(headings: Heading[]) {
       const algorithm = typesetAlgorithm(token.content, algorithmCaptions, katexOptions)
       if (algorithm) {
         algorithmCaptions += algorithm.captions
-        return `<div class="algorithm-block${lineClass}"${lineAttr}>${algorithm.html}</div>\n`
+        const source = encodePath(token.content.replace(/\n$/, ''))
+        return `<div class="algorithm-block${lineClass}"${lineAttr} data-source="${source}">${algorithm.html}</div>\n`
       }
     }
     const highlighted = highlightCode(token.content.replace(/\n$/, ''), lang)
@@ -430,9 +437,15 @@ function createMarkdown(headings: Heading[]) {
   }
   md.renderer.rules.table_close = () => '</table></div>\n'
 
+  // Formulas keep their TeX in data-tex, so the context menu can copy it.
+  const renderMathInline = md.renderer.rules.math_inline
+  md.renderer.rules.math_inline = (tokens, idx, options, env, self) => {
+    const body = renderMathInline ? renderMathInline(tokens, idx, options, env, self) : ''
+    return withTex(body, tokens[idx]?.content ?? '')
+  }
   const renderMathBlock = md.renderer.rules.math_block
   md.renderer.rules.math_block = (tokens, idx, options, env, self) => {
-    const body = renderMathBlock ? renderMathBlock(tokens, idx, options, env, self) : ''
+    const body = withTex(renderMathBlock ? renderMathBlock(tokens, idx, options, env, self) : '', tokens[idx]?.content ?? '')
     const line = tokens[idx]?.map?.[0]
     if (line == null) return body
     if (body.startsWith('<p>')) return `<p class="code-line" data-line="${line}">${body.slice(3)}`

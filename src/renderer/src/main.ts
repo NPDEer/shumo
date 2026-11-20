@@ -9,7 +9,9 @@ import { renderMarkdown } from '../../shared/markdown'
 import { lineAtOffset, offsetForLine, type LinePoint } from '../../shared/scrollsync'
 import { TOC_WIDTH_DEFAULT, TOC_WIDTH_MIN, clampTocWidth } from '../../shared/layout'
 import { markdownSanitizeConfig } from '../../shared/sanitize'
-import { dirname, localImageUrl, resolveAgainst } from '../../shared/pathutil'
+import { basename, decodePath, dirname, localImageUrl, pathFromLocalImageUrl, resolveAgainst } from '../../shared/pathutil'
+import { classifyLink } from '../../shared/links'
+import { contextMenuItems, type CodeKind, type MenuCommand, type MenuContext } from '../../shared/contextmenu'
 import {
   CONTENT_WIDTHS,
   FONT_DEFAULT,
@@ -246,28 +248,26 @@ must('#find-next').addEventListener('click', () => stepFind(1))
 must('#find-prev').addEventListener('click', () => stepFind(-1))
 must('#find-close').addEventListener('click', () => closeFinder())
 
+// Every link is handled here, so the window never navigates away from the
+// reader. Other local files are only revealed in Finder: a .py link must
+// never run the script.
 doc.addEventListener('click', (event) => {
   const anchor = (event.target as HTMLElement | null)?.closest('a')
   if (!anchor || !doc.contains(anchor)) return
-  const href = anchor.getAttribute('href') || ''
-  if (!href) return
-  if (href.startsWith('#')) {
-    event.preventDefault()
-    const id = decodeURIComponent(href.slice(1))
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  if (/^(https?:|mailto:)/i.test(href)) {
-    event.preventDefault()
-    api.openExternal(href)
-    return
-  }
-  const bare = href.split('#')[0]?.split('?')[0] ?? ''
-  if (/\.(md|markdown|mdown|mkd)$/i.test(bare)) {
-    event.preventDefault()
-    const tab = tabs[active]
-    if (tab) api.openRelative(tab.path, href)
-  }
+  event.preventDefault()
+  followLink(anchor.getAttribute('href') || '')
+})
+
+document.addEventListener('contextmenu', (event) => {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  event.preventDefault()
+  const request = menuRequest(target, event.clientX, event.clientY)
+  if (!request) return
+  const entries = contextMenuItems(request.context, FILE_MANAGER)
+  void api.showContextMenu(entries).then((id) => {
+    if (id) runMenuCommand(id as MenuCommand, request)
+  })
 })
 
 scroller.addEventListener(
@@ -377,11 +377,7 @@ api.onMenu((action) => {
   else if (action === 'reload') {
     const tab = tabs[active]
     if (tab) api.reloadFile(tab.path)
-  } else if (action === 'toggle-toc') {
-    if (welcomeVisible()) return
-    if (document.documentElement.dataset.layout === 'narrow') tocButton.click()
-    else api.setShowToc(document.documentElement.dataset.toc !== 'on')
-  }
+  } else if (action === 'toggle-toc') toggleToc()
   else if (action === 'close-tab') closeActive()
 })
 api.onStatus((message) => setStatus(message))
@@ -401,6 +397,21 @@ window.shumoTest = {
     sourceLine: lineFromSource(),
     lineCount: sourceLineCount()
   }),
+  menuAt: (selector: string) => {
+    const request = menuRequestFor(selector)
+    if (!request) return []
+    return contextMenuItems(request.context, FILE_MANAGER).map((entry) => ('separator' in entry ? '|' : entry.id))
+  },
+  runMenu: (selector: string, command: MenuCommand) => {
+    const request = menuRequestFor(selector)
+    if (request) runMenuCommand(command, request)
+  },
+  clickLink: (href: string) => {
+    const link = [...doc.querySelectorAll('a')].find((item) => item.getAttribute('href') === href)
+    if (!link) return false
+    link.click()
+    return true
+  },
   jumpToc: (label: string) =>
     new Promise((resolve) => {
       const link = [...toc.querySelectorAll('a')].find((item) => item.textContent?.includes(label))
@@ -423,6 +434,253 @@ if (boot.files.length) {
   void showActive(true)
 } else {
   showWelcome()
+}
+
+const FILE_MANAGER = api.platform === 'darwin' ? '访达' : api.platform === 'win32' ? '资源管理器' : '文件管理器'
+
+function followLink(href: string): void {
+  const tab = tabs[active]
+  switch (classifyLink(href)) {
+    case 'anchor':
+      document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    case 'external':
+      api.openExternal(href)
+      return
+    case 'markdown':
+      if (tab) api.openRelative(tab.path, href)
+      return
+    case 'file':
+      if (tab) api.revealLink(tab.path, href)
+      return
+    case 'unsupported':
+      setStatus('这个链接无法在数墨里打开')
+  }
+}
+
+function toggleToc(): void {
+  if (welcomeVisible()) return
+  if (document.documentElement.dataset.layout === 'narrow') tocButton.click()
+  else api.setShowToc(document.documentElement.dataset.toc !== 'on')
+}
+
+function findText(query: string): void {
+  openFinder()
+  findInput.value = query
+  findQuery = query
+  findIndex = 0
+  runSearch(true)
+}
+
+/** What a right-click hit, with what its commands need. */
+type MenuRequest = {
+  context: MenuContext
+  x: number
+  y: number
+  selection: string
+  filePath?: string
+  tabIndex?: number
+  href?: string
+  tex?: string
+  code?: string
+  block?: Element
+  imagePath?: string
+  headingId?: string
+  line?: number
+}
+
+function selectionWithin(root: Element): string {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return ''
+  const range = selection.getRangeAt(0)
+  return root.contains(range.commonAncestorContainer) ? selection.toString() : ''
+}
+
+/** Zero-based source line at a point in the source pane. */
+function sourceLineAt(x: number, y: number): number | undefined {
+  const caret = document.caretRangeFromPoint(x, y)
+  if (!caret || !sourceView.contains(caret.startContainer)) return undefined
+  const before = document.createRange()
+  before.setStart(sourceView, 0)
+  before.setEnd(caret.startContainer, caret.startOffset)
+  return before.toString().split('\n').length - 1
+}
+
+function codeAt(target: Element): { kind: CodeKind; text: string; block: Element } | undefined {
+  const algorithm = target.closest<HTMLElement>('.algorithm-block')
+  if (algorithm) return { kind: 'algorithm', text: decodePath(algorithm.dataset.source || ''), block: algorithm }
+  const diagram = target.closest<HTMLElement>('.mermaid-block')
+  if (diagram) return { kind: 'mermaid', text: decodePath(diagram.dataset.source || ''), block: diagram }
+  const pre = target.closest('pre')
+  if (pre) return { kind: 'code', text: pre.textContent ?? '', block: pre }
+  return undefined
+}
+
+function menuRequest(target: Element, x: number, y: number): MenuRequest | null {
+  const tabCard = target.closest<HTMLElement>('#tabs .tab')
+  if (tabCard) {
+    const index = Number(tabCard.dataset.index)
+    const tab = tabs[index]
+    if (!tab) return null
+    return { context: { area: 'tab', tabCount: tabs.length }, x, y, selection: '', filePath: tab.path, tabIndex: index }
+  }
+  const recentRow = target.closest<HTMLElement>('.recent-row')
+  if (recentRow?.dataset.path) {
+    return { context: { area: 'recent' }, x, y, selection: '', filePath: recentRow.dataset.path }
+  }
+  if (welcomeVisible()) return { context: { area: 'home', theme }, x, y, selection: '' }
+  const tab = tabs[active]
+  if (!tab) return null
+  if (target.closest('#source-pane')) {
+    const selection = selectionWithin(sourceView)
+    const line = sourceLineAt(x, y)
+    return { context: { area: 'source', selection, line }, x, y, selection, filePath: tab.path, line }
+  }
+  const inDoc = doc.contains(target)
+  const selection = selectionWithin(doc)
+  const link = inDoc ? target.closest('a[href]') : null
+  const href = link?.getAttribute('href') ?? undefined
+  const tex = inDoc ? (target.closest<HTMLElement>('[data-tex]')?.dataset.tex ?? undefined) : undefined
+  const code = inDoc ? codeAt(target) : undefined
+  const image = inDoc ? target.closest('img') : null
+  const imagePath = image?.src.startsWith('localimg:') ? pathFromLocalImageUrl(image.src) : undefined
+  const heading = inDoc ? target.closest<HTMLElement>('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]') : null
+  const root = document.documentElement
+  const context: MenuContext = {
+    area: 'doc',
+    selection,
+    link: href ? { href, kind: classifyLink(href) } : undefined,
+    tex,
+    code: code?.kind,
+    image: image ? { local: Boolean(imagePath) } : undefined,
+    heading: heading?.id,
+    view: {
+      atTop: scroller.scrollTop < 4,
+      tocShown: root.dataset.layout === 'narrow' ? root.dataset.drawer === 'open' : root.dataset.toc === 'on',
+      sourceShown: sourceOpen,
+      theme
+    }
+  }
+  return {
+    context,
+    x,
+    y,
+    selection,
+    filePath: tab.path,
+    href,
+    tex,
+    code: code?.text,
+    block: code?.block,
+    imagePath,
+    headingId: heading?.id
+  }
+}
+
+function menuRequestFor(selector: string): MenuRequest | null {
+  const target = document.querySelector(selector)
+  if (!target) return null
+  const rect = target.getBoundingClientRect()
+  return menuRequest(target, rect.left + Math.min(rect.width / 2, 40), rect.top + Math.min(rect.height / 2, 10))
+}
+
+function selectContents(node: Node): void {
+  const range = document.createRange()
+  range.selectNodeContents(node)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+}
+
+function copy(text: string | undefined, message: string): void {
+  if (!text) return
+  api.copyText(text)
+  setStatus(message)
+}
+
+function runMenuCommand(command: MenuCommand, request: MenuRequest): void {
+  const tab = tabs[active]
+  switch (command) {
+    case 'copy':
+      return copy(request.selection, '已拷贝')
+    case 'find-selection':
+      return findText(request.selection.replace(/\s+/g, ' ').trim())
+    case 'open-link':
+      if (request.href) followLink(request.href)
+      return
+    case 'reveal-link':
+      if (request.href && tab) api.revealLink(tab.path, request.href)
+      return
+    case 'copy-link':
+      return copy(request.href, '已拷贝链接地址')
+    case 'copy-tex':
+      return copy(request.tex, '已拷贝 LaTeX 源码')
+    case 'copy-code':
+      return copy(request.code, '已拷贝')
+    case 'select-block':
+      if (request.block) selectContents(request.block)
+      return
+    case 'copy-image':
+      api.copyImageAt(request.x, request.y)
+      return setStatus('已拷贝图片')
+    case 'reveal-image':
+      if (request.imagePath) api.revealPath(request.imagePath)
+      return
+    case 'copy-heading-link':
+      if (tab && request.headingId) copy(`${basename(tab.path)}#${request.headingId}`, '已拷贝标题链接')
+      return
+    case 'scroll-top':
+      scroller.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    case 'toggle-toc':
+      return toggleToc()
+    case 'toggle-source':
+      sourceButton.click()
+      return
+    case 'toggle-theme':
+      api.setTheme(theme === 'dark' ? 'light' : 'dark')
+      return
+    case 'reveal-file':
+      if (request.filePath) api.revealPath(request.filePath)
+      return
+    case 'copy-path':
+      return copy(request.filePath, '已拷贝文稿路径')
+    case 'select-all':
+      selectContents(sourceView)
+      return
+    case 'copy-line-ref':
+      if (request.filePath && request.line !== undefined) copy(`${request.filePath}:${request.line + 1}`, '已拷贝路径和行号')
+      return
+    case 'close-tab':
+      if (request.tabIndex !== undefined) closeIndex(request.tabIndex)
+      return
+    case 'close-other-tabs':
+      if (request.tabIndex !== undefined) closeOthers(request.tabIndex)
+      return
+    case 'open-recent':
+      if (request.filePath) api.openRelative(request.filePath, request.filePath)
+      return
+    case 'remove-recent':
+      if (request.filePath) api.removeRecent(request.filePath)
+      return
+    case 'open-dialog':
+      api.openDialog()
+  }
+}
+
+function closeOthers(keep: number): void {
+  const kept = tabs[keep]
+  if (!kept) return
+  for (const tab of tabs) if (tab !== kept) api.tabClosed(tab.path)
+  const current = tabs[active]
+  if (current && current !== kept) {
+    current.scrollTop = scroller.scrollTop
+    current.sourceScroll = sourcePane.scrollTop
+  }
+  const stay = active === keep && !welcomeVisible()
+  tabs = [kept]
+  active = 0
+  if (stay) paintTabs()
+  else void showActive(false)
 }
 
 function must(selector: string): HTMLElement {
@@ -868,6 +1126,7 @@ function renderWelcome(): void {
     remove.addEventListener('click', () => api.removeRecent(item.path))
     const row = document.createElement('div')
     row.className = 'recent-row'
+    row.dataset.path = item.path
     row.append(button, remove)
     list.append(row)
   }
@@ -1072,6 +1331,7 @@ function paintTabs(): void {
     const selected = index === active && !welcomeVisible()
     const card = document.createElement('div')
     card.className = `tab${selected ? ' active' : ''}`
+    card.dataset.index = String(index)
     card.setAttribute('role', 'tab')
     card.setAttribute('aria-selected', selected ? 'true' : 'false')
     const name = document.createElement('button')

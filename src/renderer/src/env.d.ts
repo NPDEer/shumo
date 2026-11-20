@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type { Bootstrap, MenuAction, OpenedFile, SettingsPayload } from '../../shared/types'
+import type { MenuCommand, MenuEntry } from '../../shared/contextmenu'
 
 export type ShumoTest = {
   openFind: () => void
@@ -8,6 +9,11 @@ export type ShumoTest = {
   closeFind: () => void
   jumpToc: (label: string) => Promise<{ moved: boolean; before: number; after: number }>
   syncLines: () => { open: boolean; previewLine: number; sourceLine: number; lineCount: number }
+  /** The context menu a right-click at this element would show, as entry ids. */
+  menuAt: (selector: string) => string[]
+  /** Runs a context menu command as if chosen on that element. */
+  runMenu: (selector: string, command: MenuCommand) => void
+  clickLink: (href: string) => boolean
 }
 
 export type ShumoApi = {
@@ -15,6 +21,11 @@ export type ShumoApi = {
   openDialog: () => void
   openRelative: (from: string, href: string) => void
   openExternal: (url: string) => void
+  revealLink: (from: string, href: string) => void
+  revealPath: (filePath: string) => void
+  copyText: (text: string) => void
+  copyImageAt: (x: number, y: number) => void
+  showContextMenu: (entries: MenuEntry[]) => Promise<string | null>
   removeRecent: (filePath: string) => void
   setTheme: (theme: Bootstrap['settings']['theme']) => void
   setFontSize: (size: number) => void

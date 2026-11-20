@@ -125,6 +125,12 @@ export function unwatch(wcId: number, filePath: string): void {
   unwatchKey(watchKey(wcId, filePath))
 }
 
+/** Paths of the files a window has open, in the order they were opened. */
+export function watchedPaths(wcId: number): string[] {
+  const prefix = `${wcId}\n`
+  return [...watches.keys()].filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length))
+}
+
 export function unwatchSender(wcId: number): void {
   for (const key of [...watches.keys()]) {
     if (key.startsWith(`${wcId}\n`)) unwatchKey(key)

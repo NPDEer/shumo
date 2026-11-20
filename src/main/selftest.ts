@@ -1,4 +1,4 @@
-import { app, ipcMain, type BrowserWindow } from 'electron'
+import { app, clipboard, ipcMain, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { updateSettings } from './settings'
@@ -137,7 +137,7 @@ const STATS_JS = `(() => {
     infoMath: !!doc?.querySelector('details.markdown-alert-info .katex-display'),
     infoTable: !!doc?.querySelector('details.markdown-alert-info table'),
     octicon: !!doc?.querySelector('.octicon-info'),
-    ceLiteral: (doc?.innerHTML ?? '').includes('\\\\ce'),
+    ceLiteral: (doc?.innerHTML ?? '').replace(/ data-tex="[^"]*"/g, '').includes('\\\\ce'),
     katexError: !!doc?.querySelector('.katex-error'),
     tabCount: document.querySelectorAll('#tabs .tab').length,
     tabClose: !!document.querySelector('#tabs .tab.active .tab-x'),
@@ -158,6 +158,7 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     assertLight(light)
     await exercise(win, report)
     await exerciseTocResize(win, report)
+    await exerciseLinksAndMenus(win, report)
     await win.webContents.executeJavaScript(
       `document.getElementById('scroller').scrollTop = 0; document.getElementById('finder').hidden = true;`
     )
@@ -348,6 +349,7 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     await assertFluid(win, shotDir, report)
     await roundTripWelcome(win, shotDir, report)
     await exerciseScrollSync(win, shotDir, report)
+    await exerciseRecovery(win, report)
 
     fs.writeFileSync(path.join(shotDir, 'selftest-report-v111.json'), JSON.stringify(report, null, 2))
     console.log('SELFTEST ok')
@@ -430,6 +432,99 @@ async function exercise(win: BrowserWindow, report: Record<string, unknown>): Pr
   report.jump = jump
   if (!jump || typeof jump !== 'object' || !(jump as { moved?: boolean }).moved) {
     throw new Error(`目录跳转失败：${JSON.stringify(jump)}`)
+  }
+}
+
+/**
+ * A link to a file that is not Markdown must leave the reader in place (it
+ * used to navigate the window to a blank "not found" page), and each kind of
+ * element gets its own right-click menu.
+ */
+async function exerciseLinksAndMenus(win: BrowserWindow, report: Record<string, unknown>): Promise<void> {
+  const before = win.webContents.getURL()
+  const clicked = await win.webContents.executeJavaScript(`window.shumoTest.clickLink('solver.py')`)
+  if (clicked !== true) throw new Error('示例里找不到 solver.py 链接')
+  await pause(500)
+  const after = await win.webContents.executeJavaScript(`({
+    url: location.href,
+    doc: !!document.querySelector('#doc h1'),
+    status: document.getElementById('status-state')?.textContent ?? ''
+  })`)
+  report.fileLink = { before, ...after }
+  if (after.url !== before || !after.doc) throw new Error(`点非 Markdown 链接后离开了阅读页：${JSON.stringify(after)}`)
+  if (!after.status.includes('不存在')) throw new Error(`点不存在的文件链接没有提示：${after.status}`)
+
+  const menus = await win.webContents.executeJavaScript(`(() => {
+    const at = (selector) => window.shumoTest.menuAt(selector)
+    return {
+      blank: at('#doc > p'),
+      formula: at('#doc p .katex[data-tex]'),
+      display: at('#doc .katex-display[data-tex]'),
+      fileLink: at('#doc a[href="solver.py"]'),
+      externalLink: at('#doc a.external-link'),
+      code: at('#doc pre code.language-python'),
+      algorithm: at('#doc .algorithm-block .ps-line'),
+      heading: at('#doc h2[id]'),
+      tab: at('#tabs .tab'),
+      sidebar: at('#toc')
+    }
+  })()`)
+  report.menus = menus
+  const expectFirst: Record<string, string> = {
+    blank: 'scroll-top',
+    formula: 'copy-tex',
+    display: 'copy-tex',
+    fileLink: 'reveal-link',
+    externalLink: 'open-link',
+    code: 'copy-code',
+    algorithm: 'copy-code',
+    heading: 'copy-heading-link',
+    tab: 'close-tab',
+    sidebar: 'scroll-top'
+  }
+  for (const [name, first] of Object.entries(expectFirst)) {
+    const entries = (menus as Record<string, string[]>)[name] ?? []
+    if (entries[0] !== first) throw new Error(`${name} 的右键菜单不对：${JSON.stringify(entries)}`)
+  }
+
+  // Copy commands go through the real clipboard; the reader's own clipboard
+  // text is put back afterwards.
+  const saved = await clipboard.readText()
+  try {
+    const tex = await win.webContents.executeJavaScript(`document.querySelector('#doc .katex-display[data-tex]').dataset.tex`)
+    await win.webContents.executeJavaScript(`window.shumoTest.runMenu('#doc .katex-display[data-tex]', 'copy-tex')`)
+    await pause(150)
+    const copiedTex = await clipboard.readText()
+    await win.webContents.executeJavaScript(`window.shumoTest.runMenu('#doc .algorithm-block .ps-line', 'copy-code')`)
+    await pause(150)
+    const copiedAlgorithm = await clipboard.readText()
+    report.menuCopy = { tex: copiedTex.slice(0, 60), algorithm: copiedAlgorithm.slice(0, 60) }
+    if (!copiedTex || copiedTex !== tex) throw new Error(`拷贝 LaTeX 源码不对：${copiedTex}`)
+    if (!copiedAlgorithm.includes('\\begin{algorithmic}')) throw new Error(`拷贝算法源码不对：${copiedAlgorithm.slice(0, 80)}`)
+  } finally {
+    await clipboard.writeText(saved)
+  }
+  await win.webContents.executeJavaScript(`document.getElementById('scroller').scrollTop = 0`)
+}
+
+/** A window whose page is lost reloads the reader with the same files open. */
+async function exerciseRecovery(win: BrowserWindow, report: Record<string, unknown>): Promise<void> {
+  const tabsBefore = await win.webContents.executeJavaScript(
+    `[...document.querySelectorAll('#tabs .tab-name')].map((item) => item.title)`
+  )
+  const back = waitNext(20000)
+  await win.loadURL('shumo://app/solver.py').catch(() => undefined)
+  await back
+  await pause(300)
+  const after = await win.webContents.executeJavaScript(`({
+    url: location.href,
+    tabs: [...document.querySelectorAll('#tabs .tab-name')].map((item) => item.title),
+    h1: document.querySelector('#doc h1')?.textContent ?? ''
+  })`)
+  report.recovery = { tabsBefore, ...after }
+  if (!String(after.url).endsWith('/index.html')) throw new Error(`页面没有恢复：${after.url}`)
+  if (!after.h1 || after.tabs.length !== (tabsBefore as string[]).length) {
+    throw new Error(`恢复后标签页不对：${JSON.stringify({ tabsBefore, after })}`)
   }
 }
 

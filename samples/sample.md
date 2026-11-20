@@ -110,6 +110,8 @@ x^2 & x\ge 0\\
 - [ ] 换成多重网格预处理
 - [ ] 把收敛表写进论文附录
 
+对应代码在 [solver.py](solver.py)（不是 Markdown，点开只会在访达中显示）。
+
 经典参考是 Trefethen 的书[^trefethen]。行内代码不应被当成公式：`$not math$`。
 
 [^trefethen]: Lloyd N. Trefethen, *Spectral Methods in MATLAB*, SIAM, 2000.

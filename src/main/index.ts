@@ -1,8 +1,10 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
+  Menu,
   nativeTheme,
   net,
   protocol,
@@ -15,6 +17,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { isMarkdownFile } from '../shared/pathutil'
+import { classifyLink, linkPath } from '../shared/links'
+import { isMenuEntries, type MenuEntry } from '../shared/contextmenu'
 import { removeRecent } from '../shared/recent'
 import {
   usesGlass,
@@ -32,6 +36,7 @@ import {
   registerImageProtocol,
   unwatch,
   unwatchSender,
+  watchedPaths,
   watchFile
 } from './files'
 import { installMenu, type MenuHandlers } from './menu'
@@ -185,9 +190,14 @@ app.on('window-all-closed', () => {
 function installIpc(): void {
   ipcMain.on('bootstrap', (event) => {
     const id = event.sender.id
-    const files = initialByWebContents.get(id) ?? []
-    initialByWebContents.delete(id)
-    bootstrapped.add(id)
+    // The preload also runs in any page the window is pushed to by mistake.
+    // Only the reader page takes the files; recoverPage brings it back.
+    const reader = isAppPage(event.senderFrame?.url ?? event.sender.getURL())
+    const files = reader ? (initialByWebContents.get(id) ?? []) : []
+    if (reader) {
+      initialByWebContents.delete(id)
+      bootstrapped.add(id)
+    }
     const opened = files.map((file) => {
       const item = readMarkdown(file)
       if (!item.error) {
@@ -227,7 +237,7 @@ function installIpc(): void {
     const from = (payload as { from?: unknown }).from
     const href = (payload as { href?: unknown }).href
     if (typeof from !== 'string' || typeof href !== 'string') return
-    const target = resolveMdLink(from, href)
+    const target = classifyLink(href) === 'markdown' ? resolveLocalLink(from, href) : null
     if (!target) {
       liveWindow(win)?.webContents.send('status', '只能打开相对的 Markdown 链接')
       return
@@ -237,6 +247,45 @@ function installIpc(): void {
       return
     }
     void openPaths(liveWindow(win), [target], true)
+  })
+
+  ipcMain.on('reveal-link', (event, payload: unknown) => {
+    const win = windowFromSender(event.sender)
+    if (!payload || typeof payload !== 'object') return
+    const from = (payload as { from?: unknown }).from
+    const href = (payload as { href?: unknown }).href
+    if (typeof from !== 'string' || typeof href !== 'string') return
+    const target = resolveLocalLink(from, href)
+    revealFile(win, target ? canonical(target) : null)
+  })
+
+  ipcMain.on('reveal-path', (event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return
+    revealFile(windowFromSender(event.sender), canonical(filePath))
+  })
+
+  ipcMain.on('copy-text', (_event, text: unknown) => {
+    if (typeof text === 'string') clipboard.writeText(text)
+  })
+
+  ipcMain.on('copy-image-at', (event, point: unknown) => {
+    if (!point || typeof point !== 'object') return
+    const { x, y } = point as { x?: unknown; y?: unknown }
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return
+    event.sender.copyImageAt(Math.round(x), Math.round(y))
+  })
+
+  // The renderer knows what was under the pointer and sends the entries; the
+  // menu itself is native. Resolves to the chosen entry's id, or null.
+  ipcMain.handle('context-menu', (event, entries: unknown) => {
+    const win = windowFromSender(event.sender)
+    if (!win || !isMenuEntries(entries) || !entries.length) return null
+    return new Promise<string | null>((resolve) => {
+      const menu = Menu.buildFromTemplate(entries.map((entry) => menuItemFor(entry, resolve)))
+      // The close callback can run before a click handler; give the click
+      // the first chance to answer.
+      menu.popup({ window: win, callback: () => setTimeout(() => resolve(null), 60) })
+    })
   })
 
   ipcMain.on('open-external', (_event, url: unknown) => {
@@ -332,23 +381,30 @@ function createWindow(files: string[]): BrowserWindow {
     unwatchSender(contentsId)
     initialByWebContents.delete(contentsId)
     bootstrapped.delete(contentsId)
+    recoveries.delete(contentsId)
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternal(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  win.webContents.on('will-navigate', (event, url) => {
-    if (DEV_URL && url.startsWith(DEV_URL)) return
-    if (url.startsWith('shumo://app/')) return
-    event.preventDefault()
+  // The reader is a single page. Links are handled in the page, so any
+  // navigation of the window itself is refused.
+  win.webContents.on('will-navigate', (event) => event.preventDefault())
+  win.webContents.on('did-navigate', (_event, url) => {
+    if (!isAppPage(url)) recoverPage(win, `离开了阅读页：${url}`)
+  })
+  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+    if (isMainFrame && code !== -3) recoverPage(win, `阅读页加载失败：${description} ${url}`)
+  })
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') recoverPage(win, `阅读页进程退出：${details.reason}`)
   })
   if (SELF_TEST) {
     win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       if (level >= 2) console.log(`RENDER ${sourceId}:${line} ${message}`)
     })
   }
-  if (DEV_URL) void win.loadURL(DEV_URL)
-  else void win.loadURL('shumo://app/index.html')
+  void win.loadURL(appPageUrl())
   return win
 }
 
@@ -589,17 +645,77 @@ function uniqueExisting(paths: string[]): string[] {
   return out
 }
 
-function resolveMdLink(fromFile: string, href: string): string | null {
-  const clean = href.split('#')[0]?.split('?')[0] ?? ''
-  if (!clean || /^(https?:|mailto:|file:)/i.test(clean)) return null
-  let decoded = clean
-  try {
-    decoded = decodeURIComponent(clean)
-  } catch {
-    decoded = clean
+/** Absolute path a local link points at, resolved against the file it is in. */
+function resolveLocalLink(fromFile: string, href: string): string | null {
+  const kind = classifyLink(href)
+  if (kind !== 'markdown' && kind !== 'file') return null
+  if (/^file:/i.test(href.trim())) {
+    try {
+      return fileURLToPath(href.trim().split('#')[0] ?? '')
+    } catch {
+      return null
+    }
   }
-  if (!isMarkdownFile(decoded)) return null
-  return path.resolve(path.dirname(fromFile), decoded)
+  return path.resolve(path.dirname(fromFile), linkPath(href.trim()))
+}
+
+const FILE_MANAGER = process.platform === 'darwin' ? '访达' : process.platform === 'win32' ? '资源管理器' : '文件管理器'
+
+/** Shows the file selected in Finder; nothing is opened or run. */
+function revealFile(win: BrowserWindow | null, real: string | null): void {
+  const target = liveWindow(win)
+  if (!real) {
+    target?.webContents.send('status', '链接的文件不存在')
+    return
+  }
+  shell.showItemInFolder(real)
+  target?.webContents.send('status', `已在${FILE_MANAGER}中显示 ${path.basename(real)}`)
+}
+
+function menuItemFor(entry: MenuEntry, choose: (id: string) => void): Electron.MenuItemConstructorOptions {
+  if ('separator' in entry) return { type: 'separator' }
+  return { label: entry.label, enabled: entry.enabled !== false, click: () => choose(entry.id) }
+}
+
+function appPageUrl(): string {
+  return DEV_URL || 'shumo://app/index.html'
+}
+
+/** True for the reader page itself, with or without index.html or a #hash. */
+function isAppPage(url: string): boolean {
+  try {
+    const page = new URL(url)
+    const home = new URL(appPageUrl())
+    return page.origin === home.origin && page.host === home.host && ['/', '/index.html'].includes(page.pathname)
+  } catch {
+    return false
+  }
+}
+
+const recoveries = new Map<number, number[]>()
+
+/**
+ * Loads the reader page again with the window's open files, so a page that
+ * was lost (navigated away, failed to load, or crashed) never leaves a blank
+ * window. Gives up after three tries in a minute to avoid a reload loop.
+ */
+function recoverPage(win: BrowserWindow, reason: string): void {
+  const target = liveWindow(win)
+  if (!target) return
+  const id = target.webContents.id
+  const now = Date.now()
+  const recent = (recoveries.get(id) ?? []).filter((time) => now - time < 60_000)
+  if (recent.length >= 3) {
+    console.error(`数墨：阅读页无法恢复（${reason}）`)
+    return
+  }
+  recoveries.set(id, [...recent, now])
+  console.warn(`数墨：重新载入阅读页（${reason}）`)
+  const open = watchedPaths(id)
+  unwatchSender(id)
+  bootstrapped.delete(id)
+  initialByWebContents.set(id, open)
+  void target.loadURL(appPageUrl())
 }
 
 function isExternal(url: string): boolean {
