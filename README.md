@@ -1,6 +1,6 @@
 # 数墨
 
-只读 Markdown 阅读器，给计算数学笔记用。双击 `.md` 打开后直接看到排好的正文。工具栏的「源码」在预览右侧打开同一份原文，只读、可选中复制，中间的分隔可以拖动。打开之后两侧按源码行号一起滚动：滚预览，源码跟到同一行；滚源码，预览也跟着。双击预览里的一块，源码会跳到对应行。正文用 VS Code Markdown 预览的排版，并调用 Markdown All in One 挂进该预览的同一组插件。14px 系统无衬线、1.6 倍行高、左右 26px。窗口变窄时正文重排，字号不变；图片和 Mermaid 按比例缩进可用宽度，过宽的表格、代码和公式在各自区域内横向滚动。
+只读 Markdown 阅读器，给计算数学笔记用。双击 `.md` 打开后直接看到排好的正文。工具栏的「源码」在预览右侧打开同一份原文，只读、可选中复制，中间的分隔可以拖动。打开之后两侧按源码行号一起滚动：滚预览，源码跟到同一行；滚源码，预览也跟着。双击预览里的一块，源码会跳到对应行。语法插件和 Markdown All in One 挂进 VS Code 预览的是同一组；界面仿 macOS 26 的 Liquid Glass：侧栏是悬浮的玻璃板，工具栏拆成几颗胶囊浮在正文上方，正文从玻璃下滚过。macOS 上窗口透明并使用系统毛玻璃材质（vibrancy）；Electron 没有提供系统液态玻璃的接口，胶囊的玻璃质感由 CSS 模糊、饱和度和高光模拟，Windows 与 Linux 上退回不透明底色。正文面板保持不透明：系统无衬线、默认 16px、1.75 倍行高、版心 760px（「视图」里可改成全宽），浅色与深色各一套系统配色。窗口变窄时正文重排，字号不变；图片和 Mermaid 按比例缩进可用宽度，过宽的表格、代码和公式在各自区域内横向滚动。
 
 ## 预览从哪来
 
@@ -15,7 +15,7 @@ Markdown All in One（[yzhang-gh/vscode-markdown](https://github.com/yzhang-gh/v
 | `markdown-it-github-alerts` | 0.3.1 | MIT，Anthony Fu | `{ matchCaseSensitive: false }`，样式用包内 `styles/github-base.css`、`github-colors-light.css`、`github-colors-dark-class.css`。只覆盖没有折叠记号的 note / tip / important / warning / caution |
 | `markdown-it-task-lists` | 2.1.1 | ISC | `{ enabled: true }`，勾选框样式沿用 All in One 的 `media/checkbox.css` |
 | `markdown-it` | 15 | MIT | All in One 声明 `^13`，VS Code 主线预览声明 `^14`。插件声明兼容 `markdown-it >= 13`，所以数墨留在 15 |
-| VS Code `markdown.css`、`highlight.css` | 主线 `extensions/markdown-language-features/media` | MIT，Microsoft | 排版和语法色在 `src/renderer/src/preview.css`，文件头保留版权声明。选择器收在阅读区里，避免改掉窗口边框 |
+| VS Code `markdown.css` | 主线 `extensions/markdown-language-features/media` | MIT，Microsoft | `src/renderer/src/preview.css` 最初从这里改写，块间距、表格与代码的溢出处理、文首表格等结构规则沿用至今，文件头保留版权声明。字号、间距和配色已重新设计；语法色改为接近 Xcode 默认主题的自绘配色，不再使用 `highlight.css` |
 | `normalizeHighlightLang` | 同目录 `markdownEngine.ts` | MIT，Microsoft | `shell`→`sh`、`py3`→`python`、`tsx`→`jsx`、`jsonc`→`json`、`csharp`→`cs`。本构建没有单独的 jsx 语法，所以 `jsx` 这个名字登记的是 TypeScript 语法 |
 
 和在 VS Code 里打开 All in One 相比，这些是故意留下的差别：

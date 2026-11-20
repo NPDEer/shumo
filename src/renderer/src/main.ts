@@ -14,12 +14,16 @@ import {
   FONT_DEFAULT,
   FONT_MAX,
   FONT_MIN,
+  usesGlass,
+  windowBackgroundFor,
   type Heading,
   type OpenedFile,
   type ResolvedTheme,
   type Settings
 } from '../../shared/types'
 import { renderDiagrams } from './mermaid'
+import { icons, toolContent } from './icons'
+import appIconUrl from '../../../build/icon.png'
 
 const boot = window.shumoBoot
 const api = window.shumo
@@ -55,46 +59,59 @@ if (!appRoot || !boot || !api) {
 const shell = appRoot
 
 appRoot.innerHTML = `
-  <header class="topbar">
-    <button type="button" id="btn-home" class="brand" title="返回首页" aria-label="返回首页">数墨</button>
-    <div id="doc-title" class="doc-title" hidden></div>
-    <div id="tabs" class="tabs" role="tablist" aria-label="打开的文稿" hidden></div>
-    <div class="topbar-spacer" aria-hidden="true"></div>
-    <div class="actions">
-      <button type="button" id="btn-toc" class="text-btn">目录</button>
-      <button type="button" id="btn-theme" class="text-btn">浅色</button>
-      <button type="button" id="btn-font-dec" class="text-btn" aria-label="减小字号" title="减小字号">A−</button>
-      <span id="font-label" class="font-label">18</span>
-      <button type="button" id="btn-font-inc" class="text-btn" aria-label="增大字号" title="增大字号">A+</button>
-      <button type="button" id="btn-width" class="text-btn" title="切换版心宽度">适中</button>
-      <button type="button" id="btn-source" class="text-btn" aria-pressed="false" aria-label="源码" title="显示源码" disabled>源码</button>
-      <button type="button" id="btn-open" class="text-btn accent" title="打开文稿">打开</button>
-    </div>
-  </header>
   <div class="workspace">
-    <nav id="toc" class="toc" aria-label="目录"></nav>
-    <div id="reader" class="reader">
-      <div id="scroller" class="scroller">
-        <div id="welcome" class="welcome" hidden></div>
-        <div class="sheet"><article id="doc" hidden></article></div>
+    <aside class="sidebar glass" aria-label="侧栏">
+      <div class="sidebar-head" aria-hidden="true"></div>
+      <nav id="toc" class="toc" aria-label="目录"></nav>
+    </aside>
+    <main class="pane">
+      <div id="reader" class="reader">
+        <div id="scroller" class="scroller">
+          <div id="welcome" class="welcome" hidden></div>
+          <div class="sheet"><article id="doc" hidden></article></div>
+        </div>
+        <div id="source-split" class="source-split" hidden role="separator" aria-orientation="vertical" aria-label="调整预览与源码的宽度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" tabindex="0"></div>
+        <div id="source-pane" class="source-pane" hidden>
+          <pre id="source-view" class="source-view" tabindex="0" aria-label="文稿源码"></pre>
+        </div>
       </div>
-      <div id="source-split" class="source-split" hidden role="separator" aria-orientation="vertical" aria-label="调整预览与源码的宽度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" tabindex="0"></div>
-      <div id="source-pane" class="source-pane" hidden>
-        <pre id="source-view" class="source-view" tabindex="0" aria-label="文稿源码"></pre>
-      </div>
-    </div>
+      <header class="topbar">
+        <div class="capsule glass capsule-docs">
+          <button type="button" id="btn-home" class="brand" title="返回首页" aria-label="返回首页">${icons.brand}<span class="brand-text">数墨</span></button>
+          <div id="doc-title" class="doc-title" hidden></div>
+          <div id="tabs" class="tabs" role="tablist" aria-label="打开的文稿" hidden></div>
+        </div>
+        <div class="topbar-spacer" aria-hidden="true"></div>
+        <div class="actions">
+          <div class="capsule glass" role="group" aria-label="显示">
+            <button type="button" id="btn-toc" class="tool">${toolContent(icons.sidebar, '目录')}</button>
+            <div class="tool-group" role="group" aria-label="字号">
+              <button type="button" id="btn-font-dec" class="tool" aria-label="减小字号" title="减小字号">${icons.textSmaller}</button>
+              <span id="font-label" class="font-label" title="当前字号">16</span>
+              <button type="button" id="btn-font-inc" class="tool" aria-label="增大字号" title="增大字号">${icons.textLarger}</button>
+            </div>
+            <button type="button" id="btn-width" class="tool" title="切换版心宽度">${toolContent(icons.width, '适中')}</button>
+            <button type="button" id="btn-theme" class="tool">${toolContent(icons.sun, '浅色')}</button>
+          </div>
+          <div class="capsule glass" role="group" aria-label="文稿">
+            <button type="button" id="btn-source" class="tool" aria-pressed="false" aria-label="源码" title="显示源码" disabled>${toolContent(icons.code, '源码')}</button>
+            <button type="button" id="btn-open" class="tool accent" title="打开文稿">${toolContent(icons.folder, '打开')}</button>
+          </div>
+        </div>
+      </header>
+      <footer class="status glass">
+        <span id="status-path" class="status-path"></span>
+        <span id="status-state" class="status-state" role="status"></span>
+      </footer>
+      <form id="finder" class="finder glass" hidden role="search">
+        <label class="finder-field">${icons.search}<input id="find-input" type="search" placeholder="在文稿中查找" aria-label="在文稿中查找" /></label>
+        <span id="find-count" class="find-count"></span>
+        <button type="button" id="find-prev" title="上一个" aria-label="上一个">${icons.chevronUp}</button>
+        <button type="button" id="find-next" title="下一个" aria-label="下一个">${icons.chevronDown}</button>
+        <button type="button" id="find-close" title="关闭查找" aria-label="关闭查找">${icons.close}</button>
+      </form>
+    </main>
   </div>
-  <footer class="status">
-    <span id="status-path" class="status-path"></span>
-    <span id="status-state" class="status-state" role="status"></span>
-  </footer>
-  <form id="finder" class="finder" hidden role="search">
-    <input id="find-input" type="search" placeholder="在文稿中查找" aria-label="在文稿中查找" />
-    <span id="find-count" class="find-count"></span>
-    <button type="button" id="find-prev">上一个</button>
-    <button type="button" id="find-next">下一个</button>
-    <button type="button" id="find-close" aria-label="关闭查找">关闭</button>
-  </form>
   <div class="drop" aria-hidden="true">松开以打开文稿</div>
 `
 
@@ -129,6 +146,10 @@ let sourceDrag: { pointerId: number; stop: () => void } | null = null
 let syncOwner: 'preview' | 'source' | 'lock' | null = null
 let syncRelease = 0
 let pendingFollow: 'preview' | 'source' | null = null
+// True while showActive is laying out a document. Fonts, diagrams and images
+// change heights during that time, so scroll events are transient: they must
+// neither drive the other pane nor overwrite the remembered positions.
+let rendering = false
 let stickSource = false
 let sourceMeasure: { key: string; origin: number; lh: number } | null = null
 
@@ -156,9 +177,9 @@ window.addEventListener('resize', () => {
 })
 new ResizeObserver(() => {
   sourceMeasure = null
-  if (!sourceOpen || welcomeVisible() || syncOwner === 'source' || syncOwner === 'lock') return
+  if (!sourceOpen || welcomeVisible() || rendering || syncOwner === 'source' || syncOwner === 'lock') return
   requestAnimationFrame(() => {
-    if (syncOwner === 'source' || syncOwner === 'lock') return
+    if (rendering || syncOwner === 'source' || syncOwner === 'lock') return
     alignSourceToPreview()
   })
 }).observe(doc)
@@ -235,6 +256,7 @@ doc.addEventListener('click', (event) => {
 scroller.addEventListener(
   'scroll',
   () => {
+    if (rendering) return
     const tab = tabs[active]
     if (tab && !welcomeVisible()) {
       tab.scrollTop = scroller.scrollTop
@@ -254,6 +276,7 @@ scroller.addEventListener(
 sourcePane.addEventListener(
   'scroll',
   () => {
+    if (rendering) return
     const tab = tabs[active]
     if (tab && !welcomeVisible()) tab.sourceScroll = sourcePane.scrollTop
     if (!sourceOpen || syncOwner === 'preview' || syncOwner === 'lock') return
@@ -291,7 +314,8 @@ api.onFileUpdated((file) => {
   const tab = tabs.find((item) => item.path === file.path)
   if (!tab) return
   const viewing = tab === tabs[active] && !welcomeVisible()
-  if (viewing) {
+  // A save that lands mid-layout keeps the position the reader had before.
+  if (viewing && !rendering) {
     tab.scrollTop = scroller.scrollTop
     tab.sourceScroll = sourcePane.scrollTop
   }
@@ -666,16 +690,13 @@ function onSourceSplitKey(event: KeyboardEvent): void {
 }
 
 function welcomeHtml(): string {
-  const mod = boot.platform === 'darwin' ? '⌘' : 'Ctrl'
+  const mod = boot.platform === 'darwin' ? '⌘' : 'Ctrl+'
   return `
     <div class="welcome-panel">
-      <div class="welcome-intro">
-        <p class="eyebrow">只读 · 公式 · 中文</p>
-        <h1>把笔记读清楚</h1>
-        <p class="lede">数墨渲染 GitHub 风味 Markdown 与 LaTeX。计算数学笔记里的表格、代码、流程图和中文夹公式，打开就能读。</p>
-        <button type="button" class="primary" id="welcome-open" title="选择要阅读的 Markdown 文件">打开文稿</button>
-        <p class="hint">把 .md 拖进窗口，或在访达里直接双击。${mod}O 打开，${mod}W 关闭当前文稿。点左上角「数墨」回到这里，已打开的文稿仍留在标签上。</p>
-      </div>
+      <img class="app-icon" src="${appIconUrl}" alt="" width="88" height="88" />
+      <h1>数墨</h1>
+      <p class="lede">把笔记读清楚</p>
+      <button type="button" class="primary" id="welcome-open" title="${mod}O，或把 .md 拖进窗口">${icons.folder}打开文稿</button>
       <section class="recent" aria-labelledby="recent-heading">
         <h2 id="recent-heading">最近打开</h2>
         <div id="recent-list"></div>
@@ -686,6 +707,7 @@ function welcomeHtml(): string {
 
 function showWelcome(): void {
   renderToken += 1
+  rendering = false
   welcome.hidden = false
   doc.hidden = true
   doc.innerHTML = ''
@@ -710,13 +732,9 @@ function renderWelcome(): void {
   const list = document.querySelector('#recent-list')
   if (!list) return
   list.replaceChildren()
-  if (!settings.recent.length) {
-    const empty = document.createElement('p')
-    empty.className = 'recent-empty'
-    empty.textContent = '还没有最近文件。'
-    list.append(empty)
-    return
-  }
+  const section = list.closest<HTMLElement>('.recent')
+  if (section) section.hidden = settings.recent.length === 0
+  if (!settings.recent.length) return
   for (const item of settings.recent) {
     const button = document.createElement('button')
     button.type = 'button'
@@ -731,6 +749,7 @@ function renderWelcome(): void {
     hint.className = 'recent-hint'
     hint.textContent = item.hint
     hint.title = item.path
+    button.insertAdjacentHTML('afterbegin', icons.doc)
     button.append(name, hint)
     button.addEventListener('click', () => api.openRelative(item.path, item.path))
     list.append(button)
@@ -740,6 +759,7 @@ function renderWelcome(): void {
 async function showActive(jumpToFind: boolean): Promise<void> {
   const token = ++renderToken
   const tab = tabs[active]
+  rendering = false
   if (!tab) {
     showWelcome()
     return
@@ -781,11 +801,14 @@ async function showActive(jumpToFind: boolean): Promise<void> {
     return
   }
   const clean = DOMPurify.sanitize(rendered.html, markdownSanitizeConfig)
+  const keepPreview = tab.scrollTop
+  const keepSource = tab.sourceScroll
+  rendering = true
   doc.innerHTML = clean
   rewriteImages(tab)
   renderToc(rendered.headings)
-  scroller.scrollTop = tab.scrollTop
-  sourcePane.scrollTop = tab.sourceScroll
+  scroller.scrollTop = keepPreview
+  sourcePane.scrollTop = keepSource
   if (!finder.hidden && findQuery) runSearch(jumpToFind)
   try {
     await document.fonts.ready
@@ -799,8 +822,11 @@ async function showActive(jumpToFind: boolean): Promise<void> {
     return
   }
   doc.dataset.render = String(token)
-  scroller.scrollTop = tab.scrollTop
-  sourcePane.scrollTop = tab.sourceScroll
+  scroller.scrollTop = keepPreview
+  sourcePane.scrollTop = keepSource
+  rendering = false
+  tab.scrollTop = scroller.scrollTop
+  tab.sourceScroll = sourcePane.scrollTop
   if (sourceOpen) alignSourceToPreview()
   markActiveHeading()
   if (!statusState.textContent || statusState.textContent === '已刷新') {
@@ -855,13 +881,15 @@ function waitImages(root: ParentNode): Promise<void> {
 
 function renderToc(headings: Heading[]): void {
   toc.replaceChildren()
+  // The home page has nothing to list; leave the sidebar empty.
+  if (!headings.length && (!tabs[active] || welcomeVisible())) return
   const title = document.createElement('h2')
   title.textContent = '目录'
   toc.append(title)
   if (!headings.length) {
     const empty = document.createElement('p')
     empty.className = 'toc-empty'
-    empty.textContent = tabs[active] && !welcomeVisible() ? '这篇文稿没有标题。' : '打开文稿后，这里会列出标题。'
+    empty.textContent = '这篇文稿没有标题。'
     toc.append(empty)
     return
   }
@@ -939,7 +967,7 @@ function paintTabs(): void {
     const close = document.createElement('button')
     close.type = 'button'
     close.className = 'tab-x'
-    close.textContent = '×'
+    close.innerHTML = icons.close
     close.title = '关闭文稿'
     close.setAttribute('aria-label', `关闭 ${label}`)
     close.addEventListener('click', () => closeIndex(index))
@@ -1088,12 +1116,13 @@ function applyChrome(): void {
   root.classList.toggle('vscode-dark', theme === 'dark')
   root.classList.toggle('vscode-light', theme !== 'dark')
   root.classList.toggle('dark', theme === 'dark')
-  root.style.background = theme === 'dark' ? '#1e1e1e' : '#ffffff'
+  root.style.background = usesGlass(boot.platform) ? 'transparent' : windowBackgroundFor(boot.platform, theme)
   fontLabel.textContent = String(clampFont(settings.fontSize))
-  themeButton.textContent = theme === 'dark' ? '深色' : '浅色'
+  themeButton.innerHTML = toolContent(theme === 'dark' ? icons.moon : icons.sun, theme === 'dark' ? '深色' : '浅色')
   themeButton.title = theme === 'dark' ? '当前为深色，点击改为浅色' : '当前为浅色，点击改为深色'
-  widthButton.textContent = WIDTH_LABEL[settings.contentWidth] ?? '适中'
-  widthButton.title = `版心${widthButton.textContent}，点击切换`
+  const widthLabel = WIDTH_LABEL[settings.contentWidth] ?? '适中'
+  widthButton.innerHTML = toolContent(icons.width, widthLabel)
+  widthButton.title = `版心${widthLabel}，点击切换`
   paintTocButton()
   paintSourceButton()
 }

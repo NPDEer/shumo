@@ -9,6 +9,7 @@ import { renderMarkdown } from '../src/shared/markdown.ts'
 import { lineAtOffset, linePoints, offsetForLine } from '../src/shared/scrollsync.ts'
 import { markdownSanitizeConfig } from '../src/shared/sanitize.ts'
 import { decodePath, encodePath, localImageUrl, resolveAgainst } from '../src/shared/pathutil.ts'
+import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor } from '../src/shared/types.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sample = fs.readFileSync(path.join(root, 'samples', 'sample.md'), 'utf8')
@@ -416,4 +417,29 @@ test('path helpers keep unicode and parent directories', () => {
   const url = localImageUrl('/笔记/图.png', 12)
   assert.ok(url.startsWith('localimg://asset/'))
   assert.ok(url.includes('?v=12'))
+})
+
+test('window background matches the stylesheet editor background in both themes', () => {
+  const css = fs.readFileSync(path.join(root, 'src', 'renderer', 'src', 'styles.css'), 'utf8')
+  const pageBackground = (selector: string): string | undefined => {
+    const start = css.indexOf(`${selector} {`)
+    const block = start < 0 ? '' : css.slice(start, css.indexOf('}', start))
+    return /--bg:\s*(#[0-9a-fA-F]{3,8})/.exec(block)?.[1]?.toLowerCase()
+  }
+  assert.deepEqual(WINDOW_BACKGROUND, {
+    light: pageBackground(':root'),
+    dark: pageBackground('html[data-theme="dark"]')
+  })
+})
+
+test('macOS windows are transparent so the system glass shows through', () => {
+  assert.equal(usesGlass('darwin'), true)
+  assert.equal(windowBackgroundFor('darwin', 'light'), '#00000000')
+  assert.equal(windowBackgroundFor('darwin', 'dark'), '#00000000')
+})
+
+test('other platforms keep an opaque window background', () => {
+  assert.equal(usesGlass('win32'), false)
+  assert.equal(windowBackgroundFor('win32', 'dark'), WINDOW_BACKGROUND.dark)
+  assert.equal(windowBackgroundFor('linux', 'light'), WINDOW_BACKGROUND.light)
 })

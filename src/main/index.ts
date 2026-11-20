@@ -15,7 +15,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { isMarkdownFile } from '../shared/pathutil'
-import type { Bootstrap, MenuAction, OpenedFile, SettingsPayload, ThemeSetting } from '../shared/types'
+import {
+  usesGlass,
+  windowBackgroundFor,
+  type Bootstrap,
+  type MenuAction,
+  type OpenedFile,
+  type SettingsPayload,
+  type ThemeSetting
+} from '../shared/types'
 import {
   canonical,
   guessTitle,
@@ -41,6 +49,13 @@ if (SELF_TEST || LIFECYCLE_TEST) {
   app.setPath('userData', dir)
   if (SELF_TEST) app.commandLine.appendSwitch('force-device-scale-factor', '1.25')
   if (process.env.SHUMO_NO_SANDBOX === '1') app.commandLine.appendSwitch('no-sandbox')
+}
+
+// The single-instance lock lives in userData. A dev build sharing it with an
+// installed 数墨 would hand its files to that copy and quit, so the old UI
+// opened instead of the code under development.
+if (DEV_URL && !SELF_TEST && !LIFECYCLE_TEST) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'shumo-dev'))
 }
 
 if (LIFECYCLE_TEST) {
@@ -279,9 +294,14 @@ function createWindow(files: string[]): BrowserWindow {
     minHeight: 480,
     show: false,
     title: files[0] ? `${path.basename(files[0])} — 数墨` : '数墨',
-    backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+    backgroundColor: windowBackgroundFor(process.platform, theme),
     titleBarStyle: mac ? 'hiddenInset' : 'default',
-    trafficLightPosition: mac ? { x: 16, y: 18 } : undefined,
+    // Centered on the 34px toolbar capsules that float 16px below the top.
+    trafficLightPosition: mac ? { x: 20, y: 27 } : undefined,
+    // 'under-window' is the most see-through system material. 'active' keeps
+    // it translucent when the window loses focus; macOS otherwise swaps in a
+    // flat gray and the glass disappears whenever another app is in front.
+    ...(usesGlass(process.platform) ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
     icon: windowIcon(),
     webPreferences: {
       preload: path.join(here, '../preload/index.cjs'),
@@ -434,7 +454,7 @@ function rememberRecent(file: OpenedFile): void {
 
 function broadcastSettings(): void {
   const payload: SettingsPayload = { settings: getSettings(), resolvedTheme: resolvedTheme() }
-  const color = payload.resolvedTheme === 'dark' ? '#141210' : '#f3efe6'
+  const color = windowBackgroundFor(process.platform, payload.resolvedTheme)
   for (const candidate of BrowserWindow.getAllWindows()) {
     const win = liveWindow(candidate)
     if (!win) continue

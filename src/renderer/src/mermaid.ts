@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify'
 import { decodePath } from '../../shared/pathutil'
-import type { ResolvedTheme } from '../../shared/types'
+import { WINDOW_BACKGROUND, type ResolvedTheme } from '../../shared/types'
 
 type MermaidApi = {
   initialize: (config: Record<string, unknown>) => void
@@ -81,30 +81,33 @@ function fitDiagram(svg: SVGElement): void {
 
 function configFor(theme: ResolvedTheme): Record<string, unknown> {
   const dark = theme === 'dark'
-  const ink = dark ? '#d4d4d4' : '#1e1e1e'
-  const line = dark ? '#3794ff' : '#007acc'
-  const paper = dark ? '#2d2d2d' : '#f3f3f3'
+  const ink = dark ? '#f5f5f7' : '#1d1d1f'
+  const border = dark ? '#0a84ff' : '#007aff'
+  const line = dark ? '#8e8e93' : '#86868b'
+  const paper = dark ? '#2c2c2e' : '#f5f5f7'
+  const page = WINDOW_BACKGROUND[theme]
+  const font = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif'
   return {
     startOnLoad: false,
     securityLevel: 'strict',
     theme: 'base',
-    fontFamily: '"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+    fontFamily: font,
     flowchart: { htmlLabels: false, curve: 'basis', padding: 14, nodeSpacing: 28, rankSpacing: 32 },
     themeVariables: {
       background: 'transparent',
-      fontFamily: '"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+      fontFamily: font,
       primaryColor: paper,
       primaryTextColor: ink,
-      primaryBorderColor: line,
+      primaryBorderColor: border,
       lineColor: line,
-      secondaryColor: dark ? '#252526' : '#f8f8f8',
-      tertiaryColor: dark ? '#1e1e1e' : '#ffffff',
+      secondaryColor: dark ? '#3a3a3c' : '#e8e8ed',
+      tertiaryColor: page,
       textColor: ink,
       nodeTextColor: ink,
       mainBkg: paper,
-      clusterBkg: dark ? '#252526' : '#f3f3f3',
+      clusterBkg: dark ? '#242426' : '#fafafa',
       titleColor: ink,
-      edgeLabelBackground: dark ? '#1e1e1e' : '#ffffff'
+      edgeLabelBackground: page
     }
   }
 }

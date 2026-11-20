@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { Bootstrap, MenuAction, OpenedFile, SettingsPayload } from '../shared/types'
+import { usesGlass, windowBackgroundFor, type Bootstrap, type MenuAction, type OpenedFile, type SettingsPayload } from '../shared/types'
 
 type Handler<T> = (payload: T) => void
 
@@ -38,13 +38,14 @@ function applyBoot(data: Bootstrap): void {
   root.classList.toggle('vscode-light', data.resolvedTheme !== 'dark')
   root.classList.toggle('dark', data.resolvedTheme === 'dark')
   root.dataset.platform = data.platform
+  root.dataset.glass = usesGlass(data.platform) ? 'on' : 'off'
   root.dataset.toc = data.settings.showToc ? 'on' : 'off'
   root.dataset.layout = window.matchMedia('(max-width: 759px)').matches ? 'narrow' : 'wide'
   root.dataset.drawer = 'closed'
   root.dataset.width = data.settings.contentWidth === 0 ? 'full' : 'fixed'
   root.style.setProperty('--reading-size', `${data.settings.fontSize}px`)
   root.style.setProperty('--reading-width', data.settings.contentWidth === 0 ? '100%' : `${data.settings.contentWidth}px`)
-  root.style.background = data.resolvedTheme === 'dark' ? '#1e1e1e' : '#ffffff'
+  root.style.background = usesGlass(data.platform) ? 'transparent' : windowBackgroundFor(data.platform, data.resolvedTheme)
 }
 
 if (document.documentElement) applyBoot(boot)

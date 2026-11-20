@@ -370,15 +370,14 @@ function assertLight(light: Stats): void {
   if (light.welcomeHidden && light.title.includes('把笔记读清楚')) throw new Error('标题不对')
   if (!light.katexFont) throw new Error('KaTeX 字体没有加载')
   if (!light.cjk) throw new Error(`中文字体不可用：${light.font}`)
-  if (light.fontSize !== '14px') throw new Error(`正文字号不是 14px：${light.fontSize}`)
-  if (light.lineHeight !== '22.4px') throw new Error(`行高不是 1.6：${light.lineHeight}`)
-  if (light.padLeft !== '26px') throw new Error(`左右边距不是 26px：${light.padLeft}`)
+  if (light.fontSize !== '16px') throw new Error(`正文字号不是 16px：${light.fontSize}`)
+  if (light.lineHeight !== '28px') throw new Error(`行高不是 1.75：${light.lineHeight}`)
+  if (light.padLeft !== '48px') throw new Error(`左右边距不是 48px：${light.padLeft}`)
   if (light.maxWidth !== 'none' && light.maxWidth !== '100%') {
     throw new Error(`正文被限制了宽度：${light.maxWidth}`)
   }
-  if (light.h1Weight !== '600') throw new Error(`标题字重不是 600：${light.h1Weight}`)
-  const border = Number.parseFloat(light.h1Border)
-  if (!(border > 0.5 && border <= 1)) throw new Error(`一级标题没有底边：${light.h1Border}`)
+  if (light.h1Weight !== '700') throw new Error(`标题字重不是 700：${light.h1Weight}`)
+  if (Number.parseFloat(light.h1Border) !== 0) throw new Error(`一级标题不应有底边：${light.h1Border}`)
   if (!light.frontmatter) throw new Error('文首信息没有渲染成表格')
   if (!light.alert) throw new Error('GitHub 提示块没有渲染')
   if (light.abstractTitle !== '一句话总结' || light.abstractMarker || !light.abstractMath) {
@@ -605,6 +604,15 @@ async function exerciseSource(win: BrowserWindow, shotDir: string, report: Recor
       sourceRight: sourceBtn.right,
       openRight: openBtn.right,
       innerWidth: window.innerWidth,
+      brandRight: document.querySelector('.brand').getBoundingClientRect().right,
+      tabsWidth: document.getElementById('tabs').getBoundingClientRect().width,
+      actionsLeft: document.querySelector('.actions').getBoundingClientRect().left,
+      actionsWidth: document.querySelector('.actions').getBoundingClientRect().width,
+      topbarScroll: document.querySelector('.topbar').scrollWidth,
+      overflowing: [...document.querySelectorAll('#doc *')]
+        .filter((el) => el.getBoundingClientRect().right > scroller.getBoundingClientRect().right + 1 && !el.closest('.table-wrap, pre, .katex-display, .mermaid-block'))
+        .slice(0, 4)
+        .map((el) => el.tagName + '.' + el.className + ':' + Math.round(el.getBoundingClientRect().width)),
       pressed: document.getElementById('btn-source').getAttribute('aria-pressed')
     }
   })()`)
@@ -844,8 +852,9 @@ async function roundTripWelcome(win: BrowserWindow, shotDir: string, report: Rec
   if (Math.abs(welcomeBar.openRight - documentBar.openRight) > 2) {
     throw new Error(`关闭文稿后工具栏跳动：文稿 ${documentBar.openRight} 欢迎 ${welcomeBar.openRight}`)
   }
-  if (welcomeBar.columns < 2 || welcomeBar.panelWidth < 700) {
-    throw new Error(`宽窗欢迎页仍然挤在中间：${welcomeBar.panelWidth} / ${welcomeBar.columns}`)
+  // The home page is one centered column: icon, name, open button, recent files.
+  if (welcomeBar.columns !== 1 || welcomeBar.panelWidth < 360 || welcomeBar.panelWidth > 480) {
+    throw new Error(`宽窗首页不是居中的单栏：${welcomeBar.panelWidth} / ${welcomeBar.columns}`)
   }
   if (!welcomeBar.recentTitle || !welcomeBar.recentPath || !welcomeBar.recentTip.includes('/')) {
     throw new Error(`最近文稿没有同时给出标题和路径：${JSON.stringify(welcomeBar)}`)
@@ -908,9 +917,10 @@ function assertLayout(box: LayoutBox, requested: number): void {
   if (Math.abs(box.innerWidth - requested) > 80) {
     throw new Error(`窗口没有缩到 ${requested}：实际 ${box.innerWidth}`)
   }
-  if (box.fontSize !== '14px') throw new Error(`${where} 字号变了：${box.fontSize}`)
+  if (box.fontSize !== '16px') throw new Error(`${where} 字号变了：${box.fontSize}`)
   if (box.pageOverflow > 2) throw new Error(`${where} 整页横向溢出 ${box.pageOverflow}px`)
-  if (box.docWidth < box.innerWidth * 0.55) {
+  // Default reading width is 760px; narrower windows still give the prose most of the width.
+  if (box.docWidth < Math.min(760, box.innerWidth * 0.55)) {
     throw new Error(`${where} 正文太窄：${Math.round(box.docWidth)}`)
   }
   if (!box.fontVisible || box.fontRight > box.innerWidth + 1) {
@@ -1131,17 +1141,27 @@ async function exerciseScrollSync(win: BrowserWindow, shotDir: string, report: R
 
   await win.webContents.executeJavaScript(`document.getElementById('btn-source').click()`)
   await pause(40)
-  const jump = await win.webContents.executeJavaScript(`(() => {
+  const jump = await win.webContents.executeJavaScript(`(async () => {
     const heading = [...document.querySelectorAll('#doc h2')].find((node) => node.textContent.includes('第 12 节'))
     const before = window.shumoTest.syncLines().previewLine
+    const pressedBefore = document.getElementById('btn-source').getAttribute('aria-pressed')
     const rect = heading.getBoundingClientRect()
     heading.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: rect.left + 12, clientY: rect.top + 10 }))
-    return { line: Number(heading.getAttribute('data-line')), before }
+    // The jump runs on the next animation frame. Wait for a few frames inside
+    // the page so the check sees the settled position, and keep the trace for
+    // diagnosis if it ever snaps back.
+    const pane = document.getElementById('source-pane')
+    const trace = []
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()))
+    for (let i = 0; i < 6; i += 1) { await frame(); trace.push(Math.round(pane.scrollTop)) }
+    await new Promise((r) => setTimeout(r, 120)); trace.push(Math.round(pane.scrollTop))
+    return { line: Number(heading.getAttribute('data-line')), before, pressedBefore, trace, lineNow: window.shumoTest.syncLines().sourceLine }
   })()`)
   await paint(win)
   const jumped = await win.webContents.executeJavaScript(`(() => {
     const sync = window.shumoTest.syncLines()
-    return { sync, pressed: document.getElementById('btn-source').getAttribute('aria-pressed') }
+    const pane = document.getElementById('source-pane')
+    return { sync, pressed: document.getElementById('btn-source').getAttribute('aria-pressed'), sourceTop: pane.scrollTop, sourceMax: pane.scrollHeight - pane.clientHeight, sourceHidden: pane.hidden }
   })()`)
   // Opening the split reflows the column, so the preview pixel moves while
   // the source line stays put. The source should land on the heading.
