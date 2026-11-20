@@ -1,6 +1,6 @@
 {
   "name": "shumo",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "private": true,
   "type": "module",
   "description": "面向计算数学笔记的只读 Markdown 阅读器",
