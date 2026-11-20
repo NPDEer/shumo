@@ -163,10 +163,12 @@ flowchart TD
 \Require 节点数 $N$，右端 $f$，边界值 $u(\pm1)=0$
 \State 生成 Chebyshev 节点 $x_j=\cos(j\pi/N)$ \Comment{$j=0,\dots,N$}
 \State 组装求导矩阵 $D$，令 $L\gets D^2$
+\Statex \textit{边界条件}
 \For{$j\in\{0,N\}$} \Comment{边界行}
     \State $L_{j,:}\gets\mathbf e_j^\top$，$f_j\gets0$
 \EndFor
 \State 解 $L\mathbf u=\mathbf f$
+\If{$\|L\mathbf u-\mathbf f\|>10^{-10}$} \textbf{warn} \EndIf
 \Ensure 节点值 $\mathbf u$
 \end{algorithmic}
 \end{algorithm}

@@ -16,7 +16,7 @@ Markdown All in One（[yzhang-gh/vscode-markdown](https://github.com/yzhang-gh/v
 | `markdown-it-task-lists` | 2.1.1 | ISC | `{ enabled: true }`，勾选框样式沿用 All in One 的 `media/checkbox.css` |
 | `markdown-it` | 15 | MIT | All in One 声明 `^13`，VS Code 主线预览声明 `^14`。插件声明兼容 `markdown-it >= 13`，所以数墨留在 15 |
 | VS Code `markdown.css` | 主线 `extensions/markdown-language-features/media` | MIT，Microsoft | `src/renderer/src/preview.css` 最初从这里改写，块间距、表格与代码的溢出处理、文首表格等结构规则沿用至今，文件头保留版权声明。字号、间距和配色已重新设计；语法色改为接近 Xcode 默认主题的自绘配色，不再使用 `highlight.css` |
-| `pseudocode`（pseudocode.js） | 2.4.1 | MIT，Saswat Padhi | ` ```latex ` 围栏里有 `\begin{algorithmic}` 时排成算法框（`src/shared/algorithm.ts`）。先删去整行 `%` 注释和 `[H]`、`[1]` 这类环境选项；写了 `[1]` 才编号。公式交给数墨的 KaTeX、带同样的选项。包里的 `require('mathjax')` 在打包时换成会报错的空模块，2.4.1 里未声明的 `attrVal` 在严格模式的打包结果里会抛错，由 `electron.vite.config.ts` 的插件补上 `var`。样式是数墨自己写的，不用包里的 CSS。解析失败时退回语法高亮的源码 |
+| `pseudocode`（pseudocode.js） | 2.4.1 | MIT，Saswat Padhi | ` ```latex ` 围栏里有 `\begin{algorithmic}` 时排成算法框（`src/shared/algorithm.ts`）。先删去整行 `%` 注释和 `[H]`、`[1]` 这类环境选项；写了 `[1]` 才编号。它不认的写法先换成等价写法：`\Statex` 排成不编号的行，正文里的 `\phantom{…}`、`\quad`、`\dots` 放进行内公式，`--` / `---` 换成短破折号和长破折号，`\If{…}` 后面直接跟的文字补上 `\State`。公式交给数墨的 KaTeX、带同样的选项。包里的 `require('mathjax')` 在打包时换成会报错的空模块，2.4.1 里有三个变量（`attrVal`、`ifCond`、`uponCond`）没声明就赋值，在严格模式的打包结果里会抛错，打包时由 `scripts/pseudocode-strict.mjs` 补上 `var`；单元测试用严格模式跑一遍 pseudocode.js 的各种写法来守住这一点。样式是数墨自己写的，不用包里的 CSS。解析失败时退回语法高亮的源码 |
 | `normalizeHighlightLang` | 同目录 `markdownEngine.ts` | MIT，Microsoft | `shell`→`sh`、`py3`→`python`、`tsx`→`jsx`、`jsonc`→`json`、`csharp`→`cs`。本构建没有单独的 jsx 语法，所以 `jsx` 这个名字登记的是 TypeScript 语法 |
 
 和在 VS Code 里打开 All in One 相比，这些是故意留下的差别：

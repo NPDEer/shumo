@@ -12,6 +12,7 @@ import { decodePath, encodePath, localImageUrl, resolveAgainst } from '../src/sh
 import { WINDOW_BACKGROUND, usesGlass, windowBackgroundFor, type RecentItem } from '../src/shared/types.ts'
 import { removeRecent } from '../src/shared/recent.ts'
 import { TOC_WIDTH_DEFAULT, clampTocWidth } from '../src/shared/layout.ts'
+import { declareUndeclared } from '../scripts/pseudocode-strict.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sample = fs.readFileSync(path.join(root, 'samples', 'sample.md'), 'utf8')
@@ -540,4 +541,84 @@ test('algorithm text is escaped', () => {
 test('typesetting leaves no global katex behind', () => {
   renderMarkdown(algorithmFence)
   assert.equal('katex' in globalThis, false)
+})
+
+function algorithmHtml(body: string): string {
+  return clean(renderMarkdown(`\`\`\`latex\n\\begin{algorithmic}[1]\n${body}\n\\end{algorithmic}\n\`\`\``).html)
+}
+
+test('statex lines are typeset without a line number', () => {
+  const safe = algorithmHtml('\\State a\n\\Statex \\textit{(2) 子迭代}\n\\State b')
+  const numbers = [...safe.matchAll(/ps-linenum"[^>]*>(\d*)</g)].map((m) => m[1])
+  assert.deepEqual(numbers, ['1', '', '2'])
+})
+
+test('text-mode phantom and quad move into math', () => {
+  const safe = algorithmHtml('\\State \\phantom{目标：}$x$\n\\State $a$，\\quad $b$')
+  assert.ok(safe.includes('ps-root'))
+  assert.equal(safe.includes('phantom'), false)
+})
+
+test('text straight after an if header becomes a statement', () => {
+  const safe = algorithmHtml('\\For{$k=0,1,\\dots$}\n\\If{$r<10^{-6}$} \\textbf{break} \\EndIf\n\\EndFor')
+  assert.match(safe, /font-weight:bold;?">break/)
+})
+
+test('double and triple hyphens become dashes outside math', () => {
+  const safe = algorithmHtml('\\State 误差 41--285\\% --- 发散')
+  assert.ok(safe.includes('41–285'))
+  assert.ok(safe.includes('— 发散'))
+})
+
+type Pseudocode = { renderToString: (input: string, options?: Record<string, unknown>) => string }
+
+/** pseudocode.js loaded as strict code, the way it runs inside the renderer bundle. */
+function strictPseudocode(fix: (code: string) => string): Pseudocode {
+  const cache = new Map<string, { exports: unknown }>()
+  const load = (file: string): unknown => {
+    const cached = cache.get(file)
+    if (cached) return cached.exports
+    const module = { exports: {} as unknown }
+    cache.set(file, module)
+    let code = fs.readFileSync(file, 'utf8')
+    if (file.endsWith(`${path.sep}Renderer.js`)) code = fix(code)
+    const localRequire = (id: string): unknown => {
+      if (!id.startsWith('.')) throw new Error(`not bundled: ${id}`)
+      const target = path.resolve(path.dirname(file), id)
+      return load(target.endsWith('.js') ? target : `${target}.js`)
+    }
+    new Function('module', 'exports', 'require', `'use strict';\n${code}`)(module, module.exports, localRequire)
+    return module.exports
+  }
+  return load(path.join(root, 'node_modules', 'pseudocode', 'pseudocode.js')) as Pseudocode
+}
+
+const everyConstruct = [
+  '\\begin{algorithm}',
+  '\\caption{全部写法}',
+  '\\begin{algorithmic}',
+  '\\State \\textbf{粗体} $x$',
+  '\\If{$a$} \\State b \\ElsIf{$c$} \\State d \\Else \\State e \\EndIf',
+  '\\While{$w$} \\State f \\EndWhile',
+  '\\Upon{$u$} \\State g \\EndUpon',
+  '\\end{algorithmic}',
+  '\\end{algorithm}'
+].join('\n')
+
+function renderStrict(fix: (code: string) => string): string {
+  const scope = globalThis as { katex?: unknown }
+  scope.katex = { renderToString: (text: string) => text }
+  try {
+    return strictPseudocode(fix).renderToString(everyConstruct, { lineNumber: true })
+  } finally {
+    delete scope.katex
+  }
+}
+
+test('pseudocode.js renders every construct in strict mode once fixed', () => {
+  assert.ok(renderStrict(declareUndeclared).includes('ps-root'))
+})
+
+test('pseudocode.js still needs the strict-mode fix', () => {
+  assert.throws(() => renderStrict((code) => code), ReferenceError)
 })
