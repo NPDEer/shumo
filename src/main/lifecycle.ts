@@ -164,6 +164,38 @@ export async function runLifecycleTest(hooks: LifecycleHooks): Promise<void> {
   if (getSettings().recent.some((item) => item.path === realB)) throw new Error('移除后设置里仍有乙稿')
   if (getSettings().recent.length !== recentBefore - 1) throw new Error('移除最近打开时误删了其他条目')
 
+  // Five recent files: the home list shows four and scrolls to the fifth.
+  const extra = ['丙', '丁', '戊', '己'].map((name) => {
+    const file = path.join(dir, `${name}.md`)
+    fs.writeFileSync(file, `# ${name}稿\n\n${name}的正文。\n`)
+    return file
+  })
+  await hooks.openPaths(win, extra, true)
+  await poll(win, `document.querySelectorAll('#tabs .tab').length === ${extra.length}`)
+  for (let left = extra.length; left > 0; left -= 1) {
+    await win.webContents.executeJavaScript(`document.querySelector('#tabs .tab-x').click()`)
+    await poll(win, `document.querySelectorAll('#tabs .tab').length === ${left - 1}`)
+  }
+  await poll(win, `document.getElementById('welcome')?.hidden === false`)
+  const recentCount = getSettings().recent.length
+  if (recentCount < 5) throw new Error(`最近打开只有 ${recentCount} 条，无法检查滚动窗口`)
+  const windowed = await win.webContents.executeJavaScript(`(() => {
+    const list = document.getElementById('recent-list')
+    const box = list.getBoundingClientRect()
+    const rows = [...list.querySelectorAll('.recent-row')].map((row) => row.getBoundingClientRect())
+    const visible = rows.filter((rect) => rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1).length
+    return { rows: rows.length, visible, scrolls: list.scrollHeight > list.clientHeight + 4, more: list.dataset.more }
+  })()`)
+  if (windowed.rows !== recentCount || windowed.visible !== 4 || !windowed.scrolls || windowed.more !== 'true') {
+    throw new Error(`最近打开没有显示成 4 条的滚动窗口：${JSON.stringify(windowed)}`)
+  }
+  await win.webContents.executeJavaScript(`(() => {
+    const list = document.getElementById('recent-list')
+    list.scrollTop = list.scrollHeight
+    list.dispatchEvent(new Event('scroll'))
+  })()`)
+  await poll(win, `document.getElementById('recent-list').dataset.more === 'false'`)
+
   app.once('will-quit', () => {
     console.log('LIFECYCLE ok')
   })

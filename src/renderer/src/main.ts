@@ -156,6 +156,11 @@ let sourceMeasure: { key: string; origin: number; lh: number } | null = null
 applyChrome()
 welcome.innerHTML = welcomeHtml()
 document.querySelector('#welcome-open')?.addEventListener('click', () => api.openDialog())
+document.querySelector<HTMLElement>('#recent-list')?.addEventListener(
+  'scroll',
+  (event) => markRecentOverflow(event.currentTarget as HTMLElement),
+  { passive: true }
+)
 
 must('#btn-open').addEventListener('click', () => api.openDialog())
 must('#btn-home').addEventListener('click', () => goHome())
@@ -489,7 +494,7 @@ function clearSource(): void {
   paintSourceButton()
 }
 
-function holdSync(owner: 'preview' | 'source' | 'lock'): void {
+function holdSync(owner: 'preview' | 'source' | 'lock', ms = 40): void {
   syncOwner = owner
   window.clearTimeout(syncRelease)
   // Programmatic scrollTop can emit a second event on the next frame.
@@ -503,7 +508,7 @@ function holdSync(owner: 'preview' | 'source' | 'lock'): void {
       if (follow === 'preview') alignSourceToPreview()
       else if (follow === 'source') alignPreviewToSource()
     })
-  }, 40)
+  }, ms)
 }
 
 function sourceLineCount(): number {
@@ -613,6 +618,10 @@ function revealLine(line: number): void {
   // the split would otherwise pull the source back to the old viewport.
   stickSource = true
   scrollSourceToLine(line)
+  // Opening the split narrows the preview; its reflow nudges the preview's
+  // scrollTop a frame later. That scroll event must not pull the source back
+  // to the preview's line, so hold both panes until the layout settles.
+  holdSync('lock', 250)
 }
 
 function setRatioFromClientX(clientX: number): void {
@@ -729,7 +738,7 @@ function showWelcome(): void {
 }
 
 function renderWelcome(): void {
-  const list = document.querySelector('#recent-list')
+  const list = document.querySelector<HTMLElement>('#recent-list')
   if (!list) return
   list.replaceChildren()
   const section = list.closest<HTMLElement>('.recent')
@@ -766,6 +775,13 @@ function renderWelcome(): void {
     row.append(button, remove)
     list.append(row)
   }
+  list.scrollTop = 0
+  markRecentOverflow(list)
+}
+
+function markRecentOverflow(list: HTMLElement): void {
+  const more = list.scrollTop + list.clientHeight < list.scrollHeight - 2
+  list.dataset.more = more ? 'true' : 'false'
 }
 
 async function showActive(jumpToFind: boolean): Promise<void> {
