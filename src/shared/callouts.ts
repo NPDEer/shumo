@@ -111,6 +111,7 @@ type CalloutToken = {
   type: string
   tag: string
   content: string
+  map?: [number, number] | null
   meta?: {
     title?: string
     type?: string
@@ -200,18 +201,21 @@ export function renderCalloutOpen(
   tokens: CalloutToken[],
   idx: number
 ): string {
-  const meta = tokens[idx]?.meta ?? {}
+  const token = tokens[idx]
+  const meta = token?.meta ?? {}
   const type = String(meta.type ?? 'note').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'note'
   const fold = meta.fold === '+' || meta.fold === '-' ? meta.fold : ''
   const icon = safeIcon(meta.icon)
   const rawTitle = meta.title ?? ''
   const titleHtml = meta.titleMarkdown ? md.renderInline(rawTitle) : rawTitle
   const head = `${icon}<span class="markdown-alert-title-text">${titleHtml}</span>`
+  const line = token?.map?.[0]
+  const lineAttr = line == null ? '' : ` data-line="${line}"`
   if (fold) {
     const openAttr = fold === '+' ? ' open' : ''
-    return `<details class="markdown-alert markdown-alert-${type}" data-callout="${type}"${openAttr}><summary class="markdown-alert-title">${head}</summary>\n`
+    return `<details class="markdown-alert markdown-alert-${type} code-line" data-callout="${type}"${lineAttr}${openAttr}><summary class="markdown-alert-title">${head}</summary>\n`
   }
-  return `<div class="markdown-alert markdown-alert-${type}" data-callout="${type}" role="note"><p class="markdown-alert-title">${head}</p>\n`
+  return `<div class="markdown-alert markdown-alert-${type} code-line" data-callout="${type}" role="note"${lineAttr}><p class="markdown-alert-title">${head}</p>\n`
 }
 
 export function renderCalloutClose(tokens: CalloutToken[], idx: number): string {

@@ -1,6 +1,6 @@
 # 数墨
 
-只读 Markdown 阅读器，给计算数学笔记用。双击 `.md` 打开后直接看到排好的正文。工具栏的「源码」在预览右侧打开同一份原文，只读、可选中复制，中间的分隔可以拖动。正文用 VS Code Markdown 预览的排版，并调用 Markdown All in One 挂进该预览的同一组插件。14px 系统无衬线、1.6 倍行高、左右 26px。窗口变窄时正文重排，字号不变；图片和 Mermaid 按比例缩进可用宽度，过宽的表格、代码和公式在各自区域内横向滚动。
+只读 Markdown 阅读器，给计算数学笔记用。双击 `.md` 打开后直接看到排好的正文。工具栏的「源码」在预览右侧打开同一份原文，只读、可选中复制，中间的分隔可以拖动。打开之后两侧按源码行号一起滚动：滚预览，源码跟到同一行；滚源码，预览也跟着。双击预览里的一块，源码会跳到对应行。正文用 VS Code Markdown 预览的排版，并调用 Markdown All in One 挂进该预览的同一组插件。14px 系统无衬线、1.6 倍行高、左右 26px。窗口变窄时正文重排，字号不变；图片和 Mermaid 按比例缩进可用宽度，过宽的表格、代码和公式在各自区域内横向滚动。
 
 ## 预览从哪来
 
@@ -28,7 +28,7 @@ Markdown All in One（[yzhang-gh/vscode-markdown](https://github.com/yzhang-gh/v
 - Markdown All in One 3.6.3 的 `extendMarkdownIt` 只调用 `markdown-it-github-alerts`。它没有 `example`、`info`，也没有 `[!type]+` / `[!type]-` 折叠。`markdown-it-obsidian-callouts` 0.3.5（Apache-2.0）能认 Obsidian 类型和 `<details>`，但没有直接采用：它把 `important` 并进 tip、把 `caution` 并进 warning，会换掉现有的五种 GitHub 提示；它还会改写 `ad-` 开头的围栏，并把围栏里的 `icon:` 原文插进 HTML；图标是 Lucide 的 `rect` / `line` / `circle`，过不了这里只放行 `svg` 和 `path` 的过滤。折叠和其余类型因此做在数墨自己的块级 token 上。
 - 支持的类型是 note、abstract（summary、tldr）、info、todo、tip（hint）、important、success（check、done）、question（help、faq）、warning（attention）、caution、failure（fail、missing）、danger（error）、bug、example、quote（cite）。`[!important]` 和 `[!caution]` 仍是 GitHub 的那两种，不按 Obsidian 别名合并。没写标题时，摘要默认是「摘要」，示例默认是「示例」，信息默认是「信息」；五种 GitHub 提示仍用 Note、Tip、Important、Warning、Caution。自定义标题按行内 Markdown 渲染，可以含公式，不插入原始 HTML。
 - 没有 `+` / `-` 的提示块不能折叠。`[!info]+` 用 `<details open>`，默认展开；`[!info]-` 用没有 `open` 的 `<details>`，默认收起。开关是 `<summary>` 自己的键盘行为，没有内联事件。不认识的 `[!名字]` 收成中性提示块，正文照常渲染。标记必须在引用第一行开头；行内、代码和围栏里的同名文字保持原文。
-- 没有编辑器滚动同步用的 `data-line`，也没有把图片改写成 `vscode-webview-resource`。相对图片仍走本应用的 `localimg` 协议。
+- 块级元素带 `data-line`，预览和源码按这些行号插值对齐，而不是按滚动百分比。图片仍走本应用的 `localimg` 协议，不改写成 `vscode-webview-resource`。
 
 主要目标是 macOS。在访达里双击文稿，会直接进入渲染结果，不会先停在欢迎页。
 

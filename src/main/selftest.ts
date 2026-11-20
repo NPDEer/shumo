@@ -280,14 +280,15 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     await exerciseSource(win, shotDir, report)
 
     await win.webContents.executeJavaScript(`document.getElementById('scroller').scrollTop = 480`)
-    await pause(50)
+    await pause(80)
     const before = await win.webContents.executeJavaScript(`({
       preview: document.getElementById('scroller').scrollTop,
       source: document.getElementById('source-pane').scrollTop,
-      sourceHeight: document.getElementById('source-pane').scrollHeight
+      sourceHeight: document.getElementById('source-pane').scrollHeight,
+      sync: window.shumoTest.syncLines()
     })`)
-    if (Math.abs(before.source - 160) > 20) {
-      throw new Error(`源码没有滚到测试位置：${JSON.stringify(before)}`)
+    if (Math.abs(before.sync.previewLine - before.sync.sourceLine) > 1.5) {
+      throw new Error(`刷新前两侧没有对齐：${JSON.stringify(before.sync)}`)
     }
     const file = await win.webContents.executeJavaScript(`window.shumoBoot.files[0].path`)
     if (typeof file !== 'string') throw new Error('没有打开的文件路径')
@@ -307,8 +308,12 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
     if (Math.abs(after.scroll - before.preview) > 80) {
       throw new Error(`滚动位置没有保住：${before.preview} -> ${after.scroll}`)
     }
-    if (Math.abs(after.sourceScroll - 160) > 40) {
-      throw new Error(`源码滚动被重置：${after.sourceScroll}`)
+    if (Math.abs(after.sourceScroll - before.source) > 40) {
+      throw new Error(`源码滚动被重置：${before.source} -> ${after.sourceScroll}`)
+    }
+    const reloadedSync = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+    if (!reloadedSync.open || Math.abs(reloadedSync.previewLine - reloadedSync.sourceLine) > 1.5) {
+      throw new Error(`刷新后两侧没有对齐：${JSON.stringify(reloadedSync)}`)
     }
     await win.webContents.executeJavaScript(`document.getElementById('btn-source').click()`)
     const sourceClosed = await win.webContents.executeJavaScript(`({
@@ -322,13 +327,14 @@ export async function runSelfTest(win: BrowserWindow, firstReady: Promise<void>)
 
     await assertFluid(win, shotDir, report)
     await roundTripWelcome(win, shotDir, report)
+    await exerciseScrollSync(win, shotDir, report)
 
-    fs.writeFileSync(path.join(shotDir, 'selftest-report-v110.json'), JSON.stringify(report, null, 2))
+    fs.writeFileSync(path.join(shotDir, 'selftest-report-v111.json'), JSON.stringify(report, null, 2))
     console.log('SELFTEST ok')
     finish(0)
   } catch (error) {
     const message = error instanceof Error ? error.stack ?? error.message : String(error)
-    fs.writeFileSync(path.join(shotDir, 'selftest-report-v110.json'), JSON.stringify({ ...report, error: message }, null, 2))
+    fs.writeFileSync(path.join(shotDir, 'selftest-report-v111.json'), JSON.stringify({ ...report, error: message }, null, 2))
     console.error('SELFTEST fail', message)
     finish(1)
   }
@@ -951,6 +957,199 @@ function assertLayout(box: LayoutBox, requested: number): void {
   } else if (box.layout !== 'wide') {
     throw new Error(`${where} 宽窗布局未生效：${box.layout} ${box.columns}`)
   }
+}
+
+function longScrollDoc(): string {
+  const parts = ['# 长文滚动对照\n\n打开源码后，左侧预览和右侧原文按同一行对齐。\n']
+  for (let i = 1; i <= 18; i += 1) {
+    parts.push(`\n## 第 ${i} 节\n\n`)
+    parts.push(`第 ${i} 节从这一行开始。未知量 $u_{${i}}(x)$ 满足下面的估计。\n\n`)
+    parts.push(`$$\n\\|e_{${i}}\\| \\le C_{${i}} e^{-${i} N}.\n$$\n\n`)
+    parts.push('```python\n')
+    for (let k = 0; k < 12; k += 1) parts.push(`term_${i}_${k} = ${i * 10 + k}\n`)
+    parts.push('```\n\n')
+    parts.push(`![第 ${i} 节的节点](figures/nodes.svg)\n\n`)
+    if (i % 4 === 0) {
+      parts.push(`> [!note]- 折叠的第 ${i} 节\n>\n> 收起时公式 $a_{${i}}$ 不占高度。\n>\n> | 项 | 值 |\n> | --- | --- |\n> | ${i} | ${i * i} |\n\n`)
+    }
+    if (i % 6 === 0) parts.push('```mermaid\nflowchart LR\n  A[开始] --> B[结束]\n```\n\n')
+  }
+  parts.push('\n## 文末\n\n最后一行用来确认滚到后段时仍落在同一段。\n')
+  return parts.join('')
+}
+
+async function exerciseScrollSync(win: BrowserWindow, shotDir: string, report: Record<string, unknown>): Promise<void> {
+  await applyTheme(win, 'light')
+  win.setContentSize(1440, 860)
+  await pause(200)
+  const samplePath = await win.webContents.executeJavaScript(`window.shumoBoot.files[0].path`)
+  if (typeof samplePath !== 'string' || !samplePath.endsWith('.md')) throw new Error('没有可对照的文稿路径')
+  const scrollPath = path.join(path.dirname(samplePath), 'scroll.md')
+  fs.writeFileSync(scrollPath, longScrollDoc())
+  const ready = waitNext()
+  await win.webContents.executeJavaScript(`window.shumo.openRelative(${JSON.stringify(samplePath)}, 'scroll.md')`)
+  await ready
+  await pause(400)
+  const loaded = await win.webContents.executeJavaScript(`({
+    title: document.body.innerText.includes('长文滚动对照'),
+    math: document.querySelectorAll('.katex-display').length,
+    images: document.querySelectorAll('#doc img').length,
+    folded: document.querySelectorAll('details.markdown-alert').length,
+    mermaid: document.querySelectorAll('.mermaid-block').length,
+    code: document.querySelectorAll('pre.hljs').length,
+    lines: document.querySelectorAll('#doc [data-line]').length
+  })`)
+  if (!loaded.title || loaded.math < 10 || loaded.images < 10 || loaded.folded < 2 || loaded.mermaid < 1 || loaded.code < 10 || loaded.lines < 20) {
+    throw new Error(`长文没有渲染完整：${JSON.stringify(loaded)}`)
+  }
+  await win.webContents.executeJavaScript(`document.getElementById('btn-source').click()`)
+  await paint(win)
+  const opened = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+  if (!opened.open || Math.abs(opened.previewLine - opened.sourceLine) > 1.5) {
+    throw new Error(`打开源码时没有跟到预览位置：${JSON.stringify(opened)}`)
+  }
+
+  const places = [
+    { name: 'top', heading: '第 1 节' },
+    { name: 'mid', heading: '第 9 节' },
+    { name: 'low', heading: '第 16 节' }
+  ]
+  const samples: unknown[] = []
+  for (const place of places) {
+    const park = `(() => {
+      const heading = [...document.querySelectorAll('#doc h2')].find((node) => (node.textContent || '').trim() === ${JSON.stringify(place.heading)})
+      const scroller = document.getElementById('scroller')
+      if (!heading) return null
+      const top = heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+      scroller.scrollTop = top
+      return Number(heading.getAttribute('data-line'))
+    })()`
+    if ((await win.webContents.executeJavaScript(park)) == null) throw new Error(`找不到${place.heading}`)
+    await paint(win)
+    const moved = await win.webContents.executeJavaScript(park)
+    if (typeof moved !== 'number') throw new Error(`找不到${place.heading}`)
+    await pause(80)
+    const sync = await win.webContents.executeJavaScript(`(() => {
+      const sync = window.shumoTest.syncLines()
+      const scroller = document.getElementById('scroller')
+      const pane = document.getElementById('source-pane')
+      const view = document.getElementById('source-view')
+      const y = scroller.getBoundingClientRect().top + 8
+      const nodes = [...document.querySelectorAll('#doc [data-line]')].filter((el) => {
+        if (!el.getClientRects().length || el.getBoundingClientRect().height < 1) return false
+        const closed = el.closest('details:not([open])')
+        return !closed || closed === el
+      })
+      let block = null
+      for (const el of nodes) {
+        const box = el.getBoundingClientRect()
+        if (box.top <= y && box.bottom > y) { block = el; break }
+      }
+      const node = view.firstChild
+      const text = node && node.textContent ? node.textContent : ''
+      const target = pane.getBoundingClientRect().top + 4
+      const range = document.createRange()
+      let lo = 0
+      let hi = text.length
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        range.setStart(node, Math.min(mid, text.length))
+        range.setEnd(node, Math.min(text.length, mid + 1))
+        if (range.getBoundingClientRect().top <= target) lo = mid
+        else hi = mid - 1
+      }
+      const sourceLine = text.slice(0, lo).split('\\n').length - 1
+      const heading = [...document.querySelectorAll('#doc h2')].find((node) => (node.textContent || '').trim() === ${JSON.stringify(place.heading)})
+      const gap = heading ? heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top : null
+      return { sync, blockLine: block ? Number(block.getAttribute('data-line')) : null, sourceLine, gap }
+    })()`)
+    samples.push({ place: place.name, headingLine: moved, ...sync })
+    if (Math.abs(sync.sync.previewLine - sync.sync.sourceLine) > 1.5) {
+      throw new Error(`${place.heading} 同步行号差太多：${JSON.stringify(sync)}`)
+    }
+    if (sync.blockLine == null || Math.abs(sync.sourceLine - moved) > 2 || Math.abs(sync.blockLine - moved) > 2) {
+      throw new Error(`${place.heading} 两侧顶部没有落在同一行：${JSON.stringify(sync)}`)
+    }
+    await shot(win, path.join(shotDir, `shumo_v111_sync_${place.name}.png`))
+  }
+
+  const code = await win.webContents.executeJavaScript(`(() => {
+    const pre = document.querySelector('pre.hljs')
+    const scroller = document.getElementById('scroller')
+    const start = Number(pre.getAttribute('data-line'))
+    const top = pre.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+    scroller.scrollTop = top + pre.getBoundingClientRect().height * 0.55
+    return { start, height: pre.getBoundingClientRect().height }
+  })()`)
+  await paint(win)
+  const throughCode = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+  if (throughCode.previewLine <= code.start + 1 || throughCode.previewLine > code.start + 14) {
+    throw new Error(`代码块内部没有按行插值：${JSON.stringify({ code, throughCode })}`)
+  }
+  if (Math.abs(throughCode.previewLine - throughCode.sourceLine) > 1.5) {
+    throw new Error(`代码块中间两侧分开了：${JSON.stringify(throughCode)}`)
+  }
+
+  const fromSource = await win.webContents.executeJavaScript(`(() => {
+    const pane = document.getElementById('source-pane')
+    const before = pane.scrollTop
+    pane.scrollTop = Math.min(pane.scrollHeight - pane.clientHeight, before + 640)
+    return { before, after: pane.scrollTop }
+  })()`)
+  await paint(win)
+  const sourceLed = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+  if (fromSource.after <= fromSource.before + 100 || Math.abs(sourceLed.previewLine - sourceLed.sourceLine) > 1.5) {
+    throw new Error(`滚动源码没有带动预览：${JSON.stringify({ fromSource, sourceLed })}`)
+  }
+
+  const folded = await win.webContents.executeJavaScript(`(() => {
+    const details = document.querySelector('details.markdown-alert')
+    const scroller = document.getElementById('scroller')
+    const line = Number(details.getAttribute('data-line'))
+    const top = details.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+    scroller.scrollTop = top
+    const hidden = details.querySelector('table')
+    const hiddenRect = hidden ? hidden.getClientRects().length : -1
+    return { line, open: details.open, hiddenRect }
+  })()`)
+  await paint(win)
+  const foldedSync = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+  // Chromium still reports a box for the table inside a closed details.
+  // Alignment has to follow the details row, not that hidden table.
+  if (folded.open || folded.hiddenRect < 1 || Math.abs(foldedSync.previewLine - folded.line) > 1.5 || Math.abs(foldedSync.sourceLine - folded.line) > 1.5) {
+    throw new Error(`折叠提示块没有按自身行号对齐：${JSON.stringify({ folded, foldedSync })}`)
+  }
+
+  win.setContentSize(1020, 760)
+  await pause(280)
+  const resized = await win.webContents.executeJavaScript(`window.shumoTest.syncLines()`)
+  if (Math.abs(resized.previewLine - resized.sourceLine) > 1.5) {
+    throw new Error(`改变窗口后两侧分开了：${JSON.stringify(resized)}`)
+  }
+  win.setContentSize(1440, 860)
+  await pause(240)
+
+  await win.webContents.executeJavaScript(`document.getElementById('btn-source').click()`)
+  await pause(40)
+  const jump = await win.webContents.executeJavaScript(`(() => {
+    const heading = [...document.querySelectorAll('#doc h2')].find((node) => node.textContent.includes('第 12 节'))
+    const before = window.shumoTest.syncLines().previewLine
+    const rect = heading.getBoundingClientRect()
+    heading.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: rect.left + 12, clientY: rect.top + 10 }))
+    return { line: Number(heading.getAttribute('data-line')), before }
+  })()`)
+  await paint(win)
+  const jumped = await win.webContents.executeJavaScript(`(() => {
+    const sync = window.shumoTest.syncLines()
+    return { sync, pressed: document.getElementById('btn-source').getAttribute('aria-pressed') }
+  })()`)
+  // Opening the split reflows the column, so the preview pixel moves while
+  // the source line stays put. The source should land on the heading.
+  if (jumped.pressed !== 'true' || Math.abs(jumped.sync.sourceLine - jump.line) > 2 || Math.abs(jumped.sync.previewLine - jump.before) > 8) {
+    throw new Error(`双击没有把源码跳到对应行：${JSON.stringify({ jump, jumped })}`)
+  }
+
+  report.scrollSync = { loaded, samples, throughCode, sourceLed, foldedSync, resized, jumped: jumped.sync }
 }
 
 function waitNext(timeout = 15000): Promise<void> {

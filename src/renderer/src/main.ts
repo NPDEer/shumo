@@ -6,6 +6,7 @@ import 'markdown-it-github-alerts/styles/github-colors-dark-class.css'
 import './styles.css'
 import './preview.css'
 import { renderMarkdown } from '../../shared/markdown'
+import { lineAtOffset, offsetForLine, type LinePoint } from '../../shared/scrollsync'
 import { markdownSanitizeConfig } from '../../shared/sanitize'
 import { dirname, localImageUrl, resolveAgainst } from '../../shared/pathutil'
 import {
@@ -125,6 +126,11 @@ const SOURCE_SPLIT = 8
 let sourceOpen = false
 let sourceRatio = loadSourceRatio()
 let sourceDrag: { pointerId: number; stop: () => void } | null = null
+let syncOwner: 'preview' | 'source' | 'lock' | null = null
+let syncRelease = 0
+let pendingFollow: 'preview' | 'source' | null = null
+let stickSource = false
+let sourceMeasure: { key: string; origin: number; lh: number } | null = null
 
 applyChrome()
 welcome.innerHTML = welcomeHtml()
@@ -137,12 +143,25 @@ sourceButton.addEventListener('click', () => {
   sourceOpen = !sourceOpen
   applySourceSplit()
   paintSourceButton()
+  if (sourceOpen) requestAnimationFrame(() => alignSourceToPreview())
 })
 sourceSplit.addEventListener('pointerdown', startSourceDrag)
 sourceSplit.addEventListener('keydown', onSourceSplitKey)
 window.addEventListener('resize', () => {
-  if (sourceOpen) applySourceSplit()
+  sourceMeasure = null
+  stickSource = false
+  if (!sourceOpen) return
+  applySourceSplit()
+  requestAnimationFrame(() => alignSourceToPreview())
 })
+new ResizeObserver(() => {
+  sourceMeasure = null
+  if (!sourceOpen || welcomeVisible() || syncOwner === 'source' || syncOwner === 'lock') return
+  requestAnimationFrame(() => {
+    if (syncOwner === 'source' || syncOwner === 'lock') return
+    alignSourceToPreview()
+  })
+}).observe(doc)
 must('#btn-font-dec').addEventListener('click', () => api.setFontSize(settings.fontSize - 1))
 must('#btn-font-inc').addEventListener('click', () => api.setFontSize(settings.fontSize + 1))
 themeButton.addEventListener('click', () => api.setTheme(theme === 'dark' ? 'light' : 'dark'))
@@ -222,9 +241,40 @@ scroller.addEventListener(
       tab.sourceScroll = sourcePane.scrollTop
     }
     markActiveHeading()
+    if (!sourceOpen) return
+    if (syncOwner === 'source' || syncOwner === 'lock') {
+      pendingFollow = 'preview'
+      return
+    }
+    stickSource = false
+    alignSourceToPreview()
   },
   { passive: true }
 )
+sourcePane.addEventListener(
+  'scroll',
+  () => {
+    const tab = tabs[active]
+    if (tab && !welcomeVisible()) tab.sourceScroll = sourcePane.scrollTop
+    if (!sourceOpen || syncOwner === 'preview' || syncOwner === 'lock') return
+    alignPreviewToSource()
+  },
+  { passive: true }
+)
+doc.addEventListener('dblclick', (event) => {
+  if (welcomeVisible()) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target.closest('a, button, summary, input, label')) return
+  const line = lineAtClientY(event.clientY)
+  if (!Number.isFinite(line)) return
+  if (!sourceOpen) {
+    sourceOpen = true
+    applySourceSplit()
+    paintSourceButton()
+  }
+  requestAnimationFrame(() => revealLine(line))
+})
 
 api.onOpenTabs((files) => {
   let focus = active
@@ -303,6 +353,12 @@ window.shumoTest = {
     runSearch(true)
   },
   closeFind: () => closeFinder(),
+  syncLines: () => ({
+    open: sourceOpen,
+    previewLine: welcomeVisible() ? 0 : lineFromPreview(),
+    sourceLine: lineFromSource(),
+    lineCount: sourceLineCount()
+  }),
   jumpToc: (label: string) =>
     new Promise((resolve) => {
       const link = [...toc.querySelectorAll('a')].find((item) => item.textContent?.includes(label))
@@ -388,6 +444,7 @@ function syncSource(tab: Tab): void {
     const keep = same ? sourcePane.scrollTop : tab.sourceScroll
     sourceView.textContent = tab.content
     sourceView.dataset.path = tab.path
+    sourceMeasure = null
     sourcePane.scrollTop = keep
     tab.sourceScroll = keep
     window.requestAnimationFrame(() => {
@@ -403,7 +460,135 @@ function clearSource(): void {
   sourceView.textContent = ''
   delete sourceView.dataset.path
   sourcePane.scrollTop = 0
+  sourceMeasure = null
+  stickSource = false
   paintSourceButton()
+}
+
+function holdSync(owner: 'preview' | 'source' | 'lock'): void {
+  syncOwner = owner
+  window.clearTimeout(syncRelease)
+  // Programmatic scrollTop can emit a second event on the next frame.
+  // A scroll that arrives while locked is applied once, after the echo.
+  syncRelease = window.setTimeout(() => {
+    requestAnimationFrame(() => {
+      if (syncOwner !== owner) return
+      syncOwner = null
+      const follow = pendingFollow
+      pendingFollow = null
+      if (follow === 'preview') alignSourceToPreview()
+      else if (follow === 'source') alignPreviewToSource()
+    })
+  }, 40)
+}
+
+function sourceLineCount(): number {
+  const text = sourceView.textContent ?? ''
+  if (!text) return 1
+  return text.split('\n').length
+}
+
+function sourceMetrics(): { origin: number; lh: number } {
+  const text = sourceView.textContent ?? ''
+  const style = getComputedStyle(sourceView)
+  const key = `${text.length}:${sourcePane.clientWidth}:${style.fontSize}:${style.lineHeight}:${style.paddingTop}`
+  if (sourceMeasure?.key === key) return sourceMeasure
+  const pad = Number.parseFloat(style.paddingTop) || 0
+  let lh = Number.parseFloat(style.lineHeight)
+  if (!Number.isFinite(lh) || lh <= 0) lh = (Number.parseFloat(style.fontSize) || 13) * 1.55
+  let origin = pad
+  const node = sourceView.firstChild
+  if (sourcePane.hidden || sourceView.getClientRects().length === 0) return { origin, lh }
+  if (node && node.nodeType === Node.TEXT_NODE && text.includes('\n')) {
+    const range = document.createRange()
+    const firstBreak = text.indexOf('\n')
+    const secondBreak = text.indexOf('\n', firstBreak + 1)
+    range.setStart(node, 0)
+    range.setEnd(node, Math.max(firstBreak, 0))
+    const first = range.getBoundingClientRect()
+    const end = secondBreak < 0 ? text.length : secondBreak
+    if (end > firstBreak + 1) {
+      range.setStart(node, firstBreak + 1)
+      range.setEnd(node, end)
+      const second = range.getBoundingClientRect()
+      if (second.top > first.top + 0.5) lh = second.top - first.top
+    }
+    origin = first.top - sourceView.getBoundingClientRect().top
+    if (!Number.isFinite(origin) || origin < 0) origin = pad
+  }
+  sourceMeasure = { key, origin, lh }
+  return sourceMeasure
+}
+
+function previewAnchors(): LinePoint[] {
+  const base = scroller.getBoundingClientRect().top - scroller.scrollTop
+  const points: LinePoint[] = []
+  for (const node of doc.querySelectorAll<HTMLElement>('[data-line]')) {
+    if (node.getClientRects().length === 0) continue
+    const rect = node.getBoundingClientRect()
+    if (rect.height < 1) continue
+    // A closed callout keeps its summary, but Chromium can still report a
+    // box for the hidden table. That box sits on the next heading and
+    // would steal its source line.
+    const closed = node.closest('details:not([open])')
+    if (closed && closed !== node) continue
+    const line = Number(node.dataset.line)
+    if (!Number.isFinite(line)) continue
+    points.push({ line, top: rect.top - base })
+  }
+  return points
+}
+
+function lineFromPreview(): number {
+  return lineAtOffset(previewAnchors(), scroller.scrollTop, scroller.scrollHeight, sourceLineCount())
+}
+
+function lineFromSource(): number {
+  const { origin, lh } = sourceMetrics()
+  if (lh <= 0) return 0
+  return Math.max(0, (sourcePane.scrollTop - origin) / lh)
+}
+
+function lineAtClientY(clientY: number): number {
+  const base = scroller.getBoundingClientRect().top - scroller.scrollTop
+  return lineAtOffset(previewAnchors(), clientY - base, scroller.scrollHeight, sourceLineCount())
+}
+
+function scrollSourceToLine(line: number): void {
+  const { origin, lh } = sourceMetrics()
+  const next = Math.max(0, origin + line * lh)
+  const max = Math.max(0, sourcePane.scrollHeight - sourcePane.clientHeight)
+  const clamped = Math.min(max, next)
+  if (Math.abs(clamped - sourcePane.scrollTop) < 1) return
+  holdSync('preview')
+  sourcePane.scrollTop = clamped
+}
+
+function scrollPreviewToLine(line: number): void {
+  const next = offsetForLine(previewAnchors(), line, scroller.scrollHeight, sourceLineCount())
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  const clamped = Math.min(max, Math.max(0, next))
+  if (Math.abs(clamped - scroller.scrollTop) < 1) return
+  holdSync('source')
+  scroller.scrollTop = clamped
+}
+
+function alignSourceToPreview(): void {
+  if (!sourceOpen || welcomeVisible() || stickSource) return
+  scrollSourceToLine(lineFromPreview())
+}
+
+function alignPreviewToSource(): void {
+  if (!sourceOpen || welcomeVisible()) return
+  scrollPreviewToLine(lineFromSource())
+}
+
+function revealLine(line: number): void {
+  if (!sourceOpen || welcomeVisible()) return
+  // Keep the preview where the reader clicked. A layout pass from opening
+  // the split would otherwise pull the source back to the old viewport.
+  stickSource = true
+  scrollSourceToLine(line)
 }
 
 function setRatioFromClientX(clientX: number): void {
@@ -616,6 +801,7 @@ async function showActive(jumpToFind: boolean): Promise<void> {
   doc.dataset.render = String(token)
   scroller.scrollTop = tab.scrollTop
   sourcePane.scrollTop = tab.sourceScroll
+  if (sourceOpen) alignSourceToPreview()
   markActiveHeading()
   if (!statusState.textContent || statusState.textContent === '已刷新') {
     statusState.textContent = '保存后自动刷新'

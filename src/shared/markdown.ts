@@ -317,7 +317,7 @@ function formatFrontValue(value: unknown): string {
   return escapeHtml(value instanceof Date ? value.toISOString() : String(value))
 }
 
-function renderFrontMatter(meta: unknown): string {
+function renderFrontMatter(meta: unknown, line: number | undefined): string {
   const content = (meta && typeof meta === 'object' && 'content' in meta ? String((meta as { content?: unknown }).content ?? '') : '')
   if (!content.trim()) return ''
   let parsed: unknown
@@ -336,7 +336,8 @@ function renderFrontMatter(meta: unknown): string {
   const rows = entries
     .map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${formatFrontValue(value)}</td></tr>`)
     .join('')
-  return `<table class="frontmatter" title="文首信息">${rows}</table>\n`
+  if (line == null) return `<table class="frontmatter" title="文首信息">${rows}</table>\n`
+  return `<table class="frontmatter code-line" data-line="${line}" title="文首信息">${rows}</table>\n`
 }
 
 const katexOptions = {
@@ -377,7 +378,7 @@ function createMarkdown(headings: Heading[]) {
   // later inline rules run. These delimiters have to be recognized first.
   // Dollar math stays on the upstream rule, which is registered after escape.
   md.inline.ruler.before('escape', 'math_brackets', mathBrackets as never)
-  md.renderer.rules.front_matter = (tokens, idx) => renderFrontMatter(tokens[idx]?.meta)
+  md.renderer.rules.front_matter = (tokens, idx) => renderFrontMatter(tokens[idx]?.meta, tokens[idx]?.map?.[0])
 
   const defaultLink = md.renderer.rules.link_open
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -400,17 +401,47 @@ function createMarkdown(headings: Heading[]) {
     if (!token) return ''
     const info = (token.info ?? '').trim().split(/\s+/)[0] ?? ''
     const lang = info.toLowerCase()
+    const line = token.map?.[0]
+    const lineAttr = line == null ? '' : ` data-line="${line}"`
+    const lineClass = line == null ? '' : ' code-line'
     if (lang === 'mermaid') {
       const source = token.content.replace(/\n$/, '')
-      return `<div class="mermaid-block" data-source="${encodePath(source)}"><pre class="mermaid">${escapeHtml(source)}</pre></div>\n`
+      return `<div class="mermaid-block${lineClass}"${lineAttr} data-source="${encodePath(source)}"><pre class="mermaid">${escapeHtml(source)}</pre></div>\n`
     }
     const highlighted = highlightCode(token.content.replace(/\n$/, ''), lang)
-    const klass = lang ? ` class="hljs language-${escapeHtml(lang)}"` : ' class="hljs"'
-    return `<pre class="hljs"><code${klass}>${highlighted}</code></pre>\n`
+    const klass = lang ? ` class="hljs language-${escapeHtml(lang)}${lineClass}"` : ` class="hljs${lineClass}"`
+    return `<pre${klass}${lineAttr}><code${lang ? ` class="hljs language-${escapeHtml(lang)}"` : ' class="hljs"'}>${highlighted}</code></pre>\n`
   }
 
-  md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+  md.renderer.rules.table_open = (tokens, idx) => {
+    const line = tokens[idx]?.map?.[0]
+    if (line == null) return '<div class="table-wrap"><table>\n'
+    return `<div class="table-wrap code-line" data-line="${line}"><table>\n`
+  }
   md.renderer.rules.table_close = () => '</table></div>\n'
+
+  const renderMathBlock = md.renderer.rules.math_block
+  md.renderer.rules.math_block = (tokens, idx, options, env, self) => {
+    const body = renderMathBlock ? renderMathBlock(tokens, idx, options, env, self) : ''
+    const line = tokens[idx]?.map?.[0]
+    if (line == null) return body
+    if (body.startsWith('<p>')) return `<p class="code-line" data-line="${line}">${body.slice(3)}`
+    if (body.startsWith('<p ')) return body.replace('<p ', `<p class="code-line" data-line="${line}" `)
+    return `<div class="code-line" data-line="${line}">${body}</div>\n`
+  }
+
+  // Same hook as VS Code markdown-language-features markdownEngine.ts:
+  // block tokens already carry a [start, end) source map. Stamp the start
+  // line on the opening tag so scroll sync can interpolate between blocks.
+  const renderToken = md.renderer.renderToken.bind(md.renderer)
+  md.renderer.renderToken = (tokens, idx, options) => {
+    const token = tokens[idx]
+    if (token?.map && token.nesting >= 0 && token.type !== 'inline') {
+      token.attrSet('data-line', String(token.map[0]))
+      token.attrJoin('class', 'code-line')
+    }
+    return renderToken(tokens, idx, options)
+  }
 
   md.core.ruler.push('heading_ids', (state) => {
     const seen = new Map<string, number>()

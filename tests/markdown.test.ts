@@ -6,6 +6,7 @@ import test from 'node:test'
 import { JSDOM } from 'jsdom'
 import createDOMPurify from 'dompurify'
 import { renderMarkdown } from '../src/shared/markdown.ts'
+import { lineAtOffset, linePoints, offsetForLine } from '../src/shared/scrollsync.ts'
 import { markdownSanitizeConfig } from '../src/shared/sanitize.ts'
 import { decodePath, encodePath, localImageUrl, resolveAgainst } from '../src/shared/pathutil.ts'
 
@@ -35,7 +36,7 @@ test('sample renders math, chinese, table, mermaid and code', () => {
   assert.ok(safe.includes('class="mermaid"'))
   assert.ok(safe.includes('figures/nodes.svg'))
   assert.ok(safe.includes('$not math$'))
-  assert.ok(safe.includes('class="frontmatter"'))
+  assert.ok(safe.includes('class="frontmatter'))
   assert.ok(safe.includes('谱方法笔记'))
   assert.ok(safe.includes('markdown-alert-note'))
   assert.ok(safe.includes('markdown-alert-abstract'))
@@ -43,7 +44,7 @@ test('sample renders math, chinese, table, mermaid and code', () => {
   assert.equal(safe.includes('[!abstract]'), false)
   assert.ok(safe.includes('markdown-alert-example'))
   assert.ok(safe.includes('怎么看误差曲线'))
-  assert.match(safe, /<details class="markdown-alert markdown-alert-info"/)
+  assert.match(safe, /<details class="markdown-alert markdown-alert-info/)
   assert.equal(/<details class="markdown-alert markdown-alert-info"[^>]* open/.test(safe), false)
   assert.ok(safe.includes('随体导数'))
   assert.ok(safe.includes('octicon-info'))
@@ -69,7 +70,7 @@ test('inline code and fences do not become math', () => {
   const { html } = renderMarkdown('价格是 `$5` 而公式是 $x$。\n\n```latex\n\\begin{align}\na&=b\n\\end{align}\n```\n')
   assert.match(html, /<code>\$5<\/code>/)
   assert.ok(html.includes('class="katex"'))
-  const code = html.slice(html.indexOf('<pre class="hljs">'))
+  const code = html.slice(html.indexOf('<pre class="hljs'))
   assert.match(code, /\\begin/)
   assert.match(code, /\{align\}/)
   assert.equal(code.includes('katex'), false)
@@ -351,6 +352,60 @@ test('obsidian callout types, aliases, folding and nested bodies', () => {
   assert.equal(safe.includes('onclick'), false)
   assert.equal(safe.includes('<script'), false)
   assert.equal(safe.includes('<img'), false)
+})
+
+test('block elements keep the source line used for scroll sync', () => {
+  const { html } = renderMarkdown(sample)
+  const safe = clean(html)
+  const doc = new JSDOM(safe).window.document
+  const lines = sample.split('\n')
+  const at = (prefix: string) => lines.findIndex((line) => line.startsWith(prefix))
+  assert.equal(doc.querySelector('h1')?.getAttribute('data-line'), String(at('# 谱方法')))
+  assert.equal(doc.querySelector('h1')?.classList.contains('code-line'), true)
+  const display = doc.querySelector('.katex-display')?.closest('[data-line]')
+  assert.equal(display?.getAttribute('data-line'), String(at('$$')))
+  const python = doc.querySelector('code.language-python')?.closest('pre')
+  assert.equal(python?.getAttribute('data-line'), String(at('```python')))
+  assert.equal(doc.querySelector('.mermaid-block')?.getAttribute('data-line'), String(at('```mermaid')))
+  assert.equal(doc.querySelector('.table-wrap')?.getAttribute('data-line'), String(lines.findIndex((line) => line.startsWith('| $N$'))))
+  const image = [...doc.querySelectorAll('img')].find((node) => node.getAttribute('src')?.includes('nodes.svg'))
+  assert.equal(image?.closest('[data-line]')?.getAttribute('data-line'), String(at('![')))
+  assert.equal(doc.querySelector('.markdown-alert-note')?.getAttribute('data-line'), String(at('> [!NOTE]')))
+  assert.equal(doc.querySelector('.markdown-alert-example')?.getAttribute('data-line'), String(at('> [!example]')))
+  assert.equal(doc.querySelector('details.markdown-alert-info')?.getAttribute('data-line'), String(at('> [!info]-')))
+  assert.equal(doc.querySelector('.markdown-alert-abstract')?.getAttribute('data-line'), String(at('> [!abstract]')))
+  const item = doc.querySelector('li')
+  assert.ok(item?.hasAttribute('data-line'))
+  const front = doc.querySelector('table.frontmatter')
+  assert.equal(front?.getAttribute('data-line'), '0')
+  const footnote = [...doc.querySelectorAll('p')].find((node) => node.textContent?.includes('Lloyd N. Trefethen'))
+  assert.equal(footnote?.getAttribute('data-line'), String(at('[^trefethen]:')))
+  assert.ok(doc.querySelectorAll('[data-line]').length > 12)
+})
+
+test('scroll sync interpolates between source lines instead of using a percentage', () => {
+  const anchors = [
+    { line: 0, top: 20 },
+    { line: 0, top: 40 },
+    { line: 4, top: 20 },
+    { line: 10, top: 200 },
+    { line: 18, top: 180 }
+  ]
+  const points = linePoints(anchors, 500, 30)
+  assert.deepEqual(points.map((point) => point.line), [0, 10, 29])
+  assert.equal(lineAtOffset(anchors, 0, 500, 30), 0)
+  assert.equal(lineAtOffset(anchors, 20, 500, 30), 0)
+  assert.equal(lineAtOffset(anchors, 110, 500, 30), 5)
+  assert.equal(offsetForLine(anchors, 5, 500, 30), 110)
+  const hidden = [
+    { line: 2, top: 40 },
+    { line: 8, top: 0 },
+    { line: 14, top: 240 }
+  ]
+  assert.deepEqual(linePoints(hidden, 400, 20).map((point) => point.line), [2, 14, 19])
+  const y = 80
+  const line = lineAtOffset(anchors, y, 500, 30)
+  assert.ok(Math.abs(offsetForLine(anchors, line, 500, 30) - y) < 0.001)
 })
 
 test('path helpers keep unicode and parent directories', () => {

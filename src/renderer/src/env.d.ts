@@ -7,6 +7,7 @@ export type ShumoTest = {
   search: (query: string) => void
   closeFind: () => void
   jumpToc: (label: string) => Promise<{ moved: boolean; before: number; after: number }>
+  syncLines: () => { open: boolean; previewLine: number; sourceLine: number; lineCount: number }
 }
 
 export type ShumoApi = {
